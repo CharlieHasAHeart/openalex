@@ -689,3 +689,84 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                 return cur.fetchall() or []
 
         return self._run_with_reconnect(_op)
+
+    def list_author_sampling_features(
+        self,
+        limit: int | None = None,
+        author_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        conditions: list[str] = []
+        if author_ids:
+            normalized_ids = [str(item).strip() for item in author_ids if str(item).strip()]
+            if normalized_ids:
+                conditions.append("a.id::text = ANY(%s)")
+                params.append(normalized_ids)
+
+        sql = """
+        WITH base AS (
+            SELECT
+                a.id AS author_id,
+                a.display_name,
+                a.last_known_institutions,
+                a.affiliations
+            FROM public.authors_analysis a
+        """
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += """
+        ),
+        topic_join AS (
+            SELECT at.author_id, t.domain_display_name, t.count AS topic_count
+            FROM public.author_topic at
+            JOIN public.topics t ON at.topic_id = t.id
+        ),
+        domain_counts AS (
+            SELECT author_id, domain_display_name, COUNT(*) AS cnt
+            FROM topic_join
+            GROUP BY author_id, domain_display_name
+        ),
+        dominant_domain AS (
+            SELECT author_id, domain_display_name
+            FROM (
+                SELECT
+                    author_id,
+                    domain_display_name,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY author_id
+                        ORDER BY cnt DESC, domain_display_name
+                    ) AS rn
+                FROM domain_counts
+            ) ranked
+            WHERE rn = 1
+        ),
+        topic_median AS (
+            SELECT
+                author_id,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY topic_count) AS median_topic_count
+            FROM topic_join
+            GROUP BY author_id
+        )
+        SELECT
+            b.author_id,
+            b.display_name,
+            d.domain_display_name AS dominant_domain,
+            b.last_known_institutions ->> 'country_code' AS institution_country_code,
+            b.last_known_institutions ->> 'type' AS institution_type,
+            jsonb_array_length(b.affiliations) AS affiliations_len,
+            m.median_topic_count
+        FROM base b
+        LEFT JOIN dominant_domain d ON d.author_id = b.author_id
+        LEFT JOIN topic_median m ON m.author_id = b.author_id
+        ORDER BY b.author_id
+        """
+        if limit is not None and limit > 0:
+            sql += " LIMIT %s"
+            params.append(limit)
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+                return cur.fetchall() or []
+
+        return self._run_with_reconnect(_op)

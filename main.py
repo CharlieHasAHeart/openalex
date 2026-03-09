@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--annotations-file", default="", help="Path to annotations JSON/JSONL file.")
     parser.add_argument("--export-benchmark-report", action="store_true", help="Export benchmark report with annotations join, then exit.")
     parser.add_argument("--benchmark-result-limit", type=int, default=1000, help="How many recent decision summaries to load for benchmark report.")
+    parser.add_argument("--build-sampling-sets", action="store_true", help="Build stratified sampling sets, then exit.")
+    parser.add_argument("--development-size", type=int, default=2000, help="Development set size.")
+    parser.add_argument("--frozen-eval-size", type=int, default=2000, help="Frozen eval set size.")
+    parser.add_argument("--shadow-size", type=int, default=10000, help="Shadow set size.")
+    parser.add_argument("--sampling-seed", type=int, default=42, help="Random seed for stratified sampling.")
     return parser.parse_args()
 
 
@@ -222,6 +227,14 @@ def main() -> int:
     from avatar_pipeline.evaluation import format_review_export, sample_decisions, summarize_decisions
     from avatar_pipeline.http import RateLimiter
     from avatar_pipeline.pg_repository import PgRepository
+    from avatar_pipeline.stratified_sampling import (
+        SamplingConfig,
+        SamplingThresholds,
+        build_sampling_labels,
+        build_sampling_sets,
+        build_stratum_key,
+        write_sampling_outputs,
+    )
 
     load_dotenv(".env")
     config = PipelineConfig.from_env()
@@ -307,6 +320,33 @@ def main() -> int:
             },
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.build_sampling_sets:
+        thresholds = SamplingThresholds()
+        sampling_config = SamplingConfig(
+            development_size=max(0, args.development_size),
+            frozen_eval_size=max(0, args.frozen_eval_size),
+            shadow_size=max(0, args.shadow_size),
+            seed=args.sampling_seed,
+        )
+        with PgRepository(
+            host=config.pghost,
+            port=config.pgport,
+            database=config.pgdatabase,
+            user=config.pguser,
+            password=config.pgpassword,
+            sslmode=config.pgsslmode,
+        ) as repository:
+            rows = repository.list_author_sampling_features()
+        labeled_rows = []
+        for row in rows:
+            labels = build_sampling_labels(row, thresholds, include_affiliation_bucket=True)
+            labels["sampling_stratum"] = build_stratum_key(labels)
+            labeled_rows.append(labels)
+        sets = build_sampling_sets(labeled_rows, sampling_config)
+        output_info = write_sampling_outputs("reports/sampling", sets)
+        print(json.dumps(output_info, ensure_ascii=False, indent=2))
         return 0
 
     try:
