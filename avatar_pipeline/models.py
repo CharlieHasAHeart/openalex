@@ -71,6 +71,20 @@ class PipelineResult:
     selected_candidate_id: int | None = None
     llm_confidence: float | None = None
     decision_reason: str | None = None
+    decision_mode: str | None = None
+    acceptance_score: float | None = None
+    fallback_used: bool | None = None
+
+
+@dataclass(slots=True)
+class FinalDecisionAssessment:
+    accept: bool
+    fallback_used: bool = False
+    selected_index: int | None = None
+    acceptance_score: float | None = None
+    score_margin: float | None = None
+    decision_reason: str = ""
+    decision_mode: str = "ambiguous"
 
 
 @dataclass(slots=True)

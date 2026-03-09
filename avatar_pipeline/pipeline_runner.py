@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from avatar_pipeline.avatar_gate import validate_image_candidate
 from avatar_pipeline.config import PipelineConfig
 from avatar_pipeline.llm_matcher import LlmMatcher
-from avatar_pipeline.models import AuthorRecord, ImageCandidate, PipelineResult
+from avatar_pipeline.models import AuthorRecord, FinalDecisionAssessment, ImageCandidate, PipelineResult
 from avatar_pipeline.oss_uploader import OssUploader, sha256_hex
 from avatar_pipeline.pg_repository import PgRepository
 from avatar_pipeline.web_search_client import WebSearchClient
@@ -122,7 +122,7 @@ class PipelineRunner:
 
         self._stats[result.status] += 1
         logger.info(
-            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s selected_candidate_id=%s llm_confidence=%s error_message=%s persist_error=%s run_persist_error=%s",
+            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s selected_candidate_id=%s llm_confidence=%s decision_mode=%s acceptance_score=%s fallback_used=%s error_message=%s persist_error=%s run_persist_error=%s",
             self._run_id,
             author.author_id,
             author.orcid,
@@ -131,6 +131,9 @@ class PipelineRunner:
             result.commons_file,
             result.selected_candidate_id,
             result.llm_confidence,
+            result.decision_mode,
+            result.acceptance_score,
+            result.fallback_used,
             result.error_message,
             persist_error,
             run_persist_error,
@@ -265,11 +268,57 @@ class PipelineRunner:
                 author_id=author.author_id,
                 status="ambiguous",
                 error_message=f"llm_no_confident_match{reason_hint}",
+                decision_mode="ambiguous",
+                fallback_used=False,
             )
         if decision.selected_index < 0 or decision.selected_index >= len(llm_candidates):
-            return PipelineResult(author_id=author.author_id, status="ambiguous", error_message="llm_invalid_selected_index")
+            return PipelineResult(
+                author_id=author.author_id,
+                status="ambiguous",
+                error_message="llm_invalid_selected_index",
+                decision_mode="ambiguous",
+                fallback_used=False,
+            )
 
-        original_selected_index = top_index_to_original[decision.selected_index]
+        assessment: FinalDecisionAssessment
+        try:
+            assessment = self._assess_final_decision(author, llm_candidates, decision)
+        except Exception as exc:
+            logger.error(
+                "pipeline_decision_assessment_failed run_id=%s author_id=%s error_message=%s",
+                self._run_id,
+                author.author_id,
+                str(exc),
+            )
+            # Fallback to direct LLM decision.
+            selected = decision.selected_index
+            top_other = max(
+                [float(c.pre_rank_score or 0.0) for i, c in enumerate(llm_candidates) if i != selected] or [-999.0]
+            )
+            assessment = FinalDecisionAssessment(
+                accept=True,
+                fallback_used=False,
+                selected_index=selected,
+                acceptance_score=float(decision.confidence),
+                score_margin=float(llm_candidates[selected].pre_rank_score or 0.0) - top_other,
+                decision_reason="assessment_failed_fallback_to_direct_llm",
+                decision_mode="direct_accept",
+            )
+
+        if not assessment.accept or assessment.selected_index is None:
+            return PipelineResult(
+                author_id=author.author_id,
+                status="ambiguous",
+                error_message=f"final_gating_ambiguous:{assessment.decision_reason}",
+                llm_confidence=decision.confidence,
+                decision_reason=assessment.decision_reason,
+                decision_mode="ambiguous",
+                acceptance_score=assessment.acceptance_score,
+                fallback_used=assessment.fallback_used,
+            )
+
+        selected_llm_index = assessment.selected_index
+        original_selected_index = top_index_to_original[selected_llm_index]
         chosen = candidates[original_selected_index]
         selected_candidate_id = candidate_id_by_index.get(original_selected_index)
         if self._run_id and selected_candidate_id is not None:
@@ -283,8 +332,17 @@ class PipelineRunner:
                     final_score=decision.confidence,
                     decision_reason=decision.reason,
                     evidence={
-                        "selected_index": decision.selected_index,
+                        "selected_index": selected_llm_index,
                         "original_index": original_selected_index,
+                        "acceptance_score": assessment.acceptance_score,
+                        "score_margin": assessment.score_margin,
+                        "decision_mode": assessment.decision_mode,
+                        "fallback_used": assessment.fallback_used,
+                        "acceptance_reason": assessment.decision_reason,
+                        "top_candidate_count_considered": len(llm_candidates),
+                        "fallback_from_index": decision.selected_index if assessment.fallback_used else None,
+                        "fallback_to_index": selected_llm_index if assessment.fallback_used else None,
+                        "fallback_reason": assessment.decision_reason if assessment.fallback_used else None,
                         "source_type": chosen.source_type,
                         "discovery_score": chosen.discovery_score,
                         "discovery_evidence": chosen.discovery_evidence,
@@ -351,7 +409,10 @@ class PipelineRunner:
                 error_message=image_error,
                 selected_candidate_id=selected_candidate_id,
                 llm_confidence=decision.confidence,
-                decision_reason=decision.reason,
+                decision_reason=assessment.decision_reason,
+                decision_mode=assessment.decision_mode,
+                acceptance_score=assessment.acceptance_score,
+                fallback_used=assessment.fallback_used,
             )
 
         sha256 = sha256_hex(image_bytes)
@@ -366,7 +427,10 @@ class PipelineRunner:
                 oss_url=existing.get("oss_url"),
                 selected_candidate_id=selected_candidate_id,
                 llm_confidence=decision.confidence,
-                decision_reason=decision.reason,
+                decision_reason=assessment.decision_reason,
+                decision_mode=assessment.decision_mode,
+                acceptance_score=assessment.acceptance_score,
+                fallback_used=assessment.fallback_used,
             )
 
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, candidate.mime)
@@ -380,7 +444,139 @@ class PipelineRunner:
             oss_url=oss_url,
             selected_candidate_id=selected_candidate_id,
             llm_confidence=decision.confidence,
-            decision_reason=decision.reason,
+            decision_reason=assessment.decision_reason,
+            decision_mode=assessment.decision_mode,
+            acceptance_score=assessment.acceptance_score,
+            fallback_used=assessment.fallback_used,
+        )
+
+    def _source_type_reliability(self, source_type: str | None) -> float:
+        st = (source_type or "generic_search_result").lower()
+        return {
+            "orcid_external_link": 1.0,
+            "institution_profile": 0.95,
+            "institution_directory": 0.8,
+            "lab_people_page": 0.72,
+            "orcid_profile": 0.7,
+            "generic_search_result": 0.45,
+        }.get(st, 0.45)
+
+    def _structure_reliability(self, candidate) -> float:
+        role = (candidate.page_image_role or "").lower()
+        base = {
+            "profile_headshot": 1.0,
+            "card_headshot": 0.85,
+            "generic_page_image": 0.35,
+            "decorative_or_logo": 0.0,
+        }.get(role, 0.4)
+        base += min(float(candidate.name_proximity_score or 0.0), 1.0) * 0.35
+        base += min(float(candidate.page_image_position_score or 0.0), 1.0) * 0.25
+        return max(0.0, min(base, 1.2))
+
+    def _acceptance_score(self, candidate, llm_confidence: float) -> float:
+        pre_rank = float(candidate.pre_rank_score or 0.0)
+        pre_rank_component = max(0.0, min((pre_rank + 2.0) / 10.0, 1.0))
+        cluster_component = min(max(int(candidate.merged_count or 1) - 1, 0) * 0.08, 0.24)
+        source_component = self._source_type_reliability(candidate.source_type) * 0.22
+        structure_component = self._structure_reliability(candidate) * 0.22
+        llm_component = max(0.0, min(llm_confidence, 1.0)) * 0.34
+        penalty = 0.0
+        if candidate.is_valid_image is False:
+            penalty += 0.28
+        if candidate.invalid_reason:
+            penalty += 0.18
+        score = (pre_rank_component * 0.22) + llm_component + source_component + structure_component + cluster_component - penalty
+        return max(0.0, min(score, 1.0))
+
+    def _assess_final_decision(self, author: AuthorRecord, llm_candidates: list, llm_decision) -> FinalDecisionAssessment:
+        selected_index = llm_decision.selected_index
+        if selected_index < 0 or selected_index >= len(llm_candidates):
+            return FinalDecisionAssessment(
+                accept=False,
+                selected_index=None,
+                acceptance_score=0.0,
+                score_margin=None,
+                decision_reason="llm_selected_index_out_of_range",
+                decision_mode="ambiguous",
+            )
+
+        top = llm_candidates[selected_index]
+        others = [(i, c) for i, c in enumerate(llm_candidates) if i != selected_index]
+        best_other_idx, best_other = max(others, key=lambda x: float(x[1].pre_rank_score or -999.0)) if others else (None, None)
+        top_score = float(top.pre_rank_score or 0.0)
+        best_other_score = float(best_other.pre_rank_score or -999.0) if best_other is not None else -999.0
+        score_margin = top_score - best_other_score if best_other is not None else 999.0
+        acceptance_score = self._acceptance_score(top, float(llm_decision.confidence))
+
+        # Conservative direct-accept gate.
+        if (
+            float(llm_decision.confidence) >= 0.68
+            and acceptance_score >= 0.62
+            and score_margin >= 0.35
+            and top.is_valid_image is not False
+        ):
+            return FinalDecisionAssessment(
+                accept=True,
+                fallback_used=False,
+                selected_index=selected_index,
+                acceptance_score=acceptance_score,
+                score_margin=score_margin,
+                decision_reason="strong_top1_with_clear_margin",
+                decision_mode="direct_accept",
+            )
+
+        # Early ambiguous for weak evidence.
+        if float(llm_decision.confidence) < 0.55 or acceptance_score < 0.48:
+            return FinalDecisionAssessment(
+                accept=False,
+                fallback_used=False,
+                selected_index=None,
+                acceptance_score=acceptance_score,
+                score_margin=score_margin if best_other is not None else None,
+                decision_reason="weak_confidence_or_acceptance",
+                decision_mode="ambiguous",
+            )
+
+        # Controlled fallback: only when alternative is clearly cleaner.
+        if best_other is not None and best_other_idx is not None:
+            top_rel = self._source_type_reliability(top.source_type) + self._structure_reliability(top)
+            alt_rel = self._source_type_reliability(best_other.source_type) + self._structure_reliability(best_other)
+            alt_cleaner = best_other.is_valid_image is not False and top.is_valid_image is False
+            alt_better_source = alt_rel > top_rel + 0.2
+            close_scores = abs(top_score - best_other_score) <= 0.6
+            if close_scores and (alt_cleaner or alt_better_source):
+                alt_acceptance = self._acceptance_score(best_other, float(llm_decision.confidence) * 0.92)
+                if alt_acceptance >= 0.58:
+                    return FinalDecisionAssessment(
+                        accept=True,
+                        fallback_used=True,
+                        selected_index=best_other_idx,
+                        acceptance_score=alt_acceptance,
+                        score_margin=score_margin,
+                        decision_reason="fallback_to_cleaner_or_more_trustworthy_candidate",
+                        decision_mode="fallback_accept",
+                    )
+
+        # Conservative final rule: if margin is too tight, choose ambiguous.
+        if score_margin < 0.2 or acceptance_score < 0.58:
+            return FinalDecisionAssessment(
+                accept=False,
+                fallback_used=False,
+                selected_index=None,
+                acceptance_score=acceptance_score,
+                score_margin=score_margin if best_other is not None else None,
+                decision_reason="insufficient_margin_or_acceptance",
+                decision_mode="ambiguous",
+            )
+
+        return FinalDecisionAssessment(
+            accept=True,
+            fallback_used=False,
+            selected_index=selected_index,
+            acceptance_score=acceptance_score,
+            score_margin=score_margin if best_other is not None else None,
+            decision_reason="moderate_acceptance_passed_threshold",
+            decision_mode="direct_accept",
         )
 
     def _score_candidate(self, author: AuthorRecord, candidate) -> tuple[float, float, float, float]:
