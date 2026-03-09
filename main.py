@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="Specific OpenAlex author id (URL or A-ID). Can repeat.",
     )
+    parser.add_argument("--author-ids-file", default="", help="Path to JSON/JSONL file containing author_id values.")
     parser.add_argument("--author-limit", type=int, default=0, help="Limit authors loaded from DB authors_analysis table. 0 means all.")
     parser.add_argument("--author-offset", type=int, default=0, help="Skip first N authors from DB authors_analysis table.")
     parser.add_argument("--fetch-batch-size", type=int, default=2000, help="Batch size for loading authors from DB in streaming mode.")
@@ -70,6 +71,43 @@ def _build_author_id_candidates(raw_ids: set[str]) -> list[str]:
             if tail:
                 candidates.add(tail)
     return sorted(candidates)
+
+
+def _load_author_ids_from_file(path: str) -> list[str]:
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"author ids file not found: {path}")
+    text = p.read_text(encoding="utf-8").strip()
+    if not text:
+        return []
+    rows: list[object]
+    if p.suffix.lower() == ".jsonl":
+        rows = []
+        for i, line in enumerate(text.splitlines(), start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception as exc:
+                raise ValueError(f"invalid jsonl at line {i}: {exc}") from exc
+    else:
+        payload = json.loads(text)
+        if isinstance(payload, list):
+            rows = payload
+        else:
+            rows = [payload]
+
+    author_ids: list[str] = []
+    for item in rows:
+        if isinstance(item, dict):
+            author_id = item.get("author_id")
+            if author_id is not None and str(author_id).strip():
+                author_ids.append(str(author_id).strip())
+            continue
+        if isinstance(item, str) and item.strip():
+            author_ids.append(item.strip())
+    return author_ids
 
 
 def _create_runner(config, limiter, run_id: str | None = None):
@@ -271,6 +309,13 @@ def main() -> int:
     start_monotonic = time.monotonic()
     stats: Counter[str] = Counter()
     done = 0
+    file_author_ids: list[str] = []
+    if args.author_ids_file.strip():
+        try:
+            file_author_ids = _load_author_ids_from_file(args.author_ids_file.strip())
+        except Exception as exc:
+            logger.exception("author_ids_file_load_failed path=%s error=%s", args.author_ids_file, exc)
+            return 2
 
     if args.export_review_summaries:
         with PgRepository(
@@ -442,19 +487,23 @@ def main() -> int:
             password=config.pgpassword,
             sslmode=config.pgsslmode,
         ) as repository:
-            trigger_type = "manual_single" if args.author_id and len(args.author_id) == 1 else ("manual_batch" if args.author_limit != 1 else "manual_single")
+            explicit_author_ids = [item.strip() for item in args.author_id if item.strip()] + file_author_ids
+            has_explicit_authors = len(explicit_author_ids) > 0
+            trigger_type = "manual_single" if has_explicit_authors and len(explicit_author_ids) == 1 else ("manual_batch" if args.author_limit != 1 else "manual_single")
             run_id = repository.create_pipeline_run(trigger_type=trigger_type, status="running")
             logger.info("pipeline_run_started run_id=%s trigger_type=%s", run_id, trigger_type)
             if workers == 1:
                 if runner_repository is not None:
                     runner_repository.close()
                 runner, runner_repository = _create_runner(config, limiter, run_id=run_id)
-            if args.author_id:
-                requested_ids = {item.strip() for item in args.author_id if item.strip()}
+            if has_explicit_authors:
+                requested_ids = {item for item in explicit_author_ids if item}
                 id_candidates = _build_author_id_candidates(requested_ids)
                 logger.info(
-                    "starting load authors mode=author_id requested=%s workers=%s progress_every=%s",
+                    "starting load authors mode=author_id requested=%s from_cli=%s from_file=%s workers=%s progress_every=%s",
                     len(requested_ids),
+                    len([item for item in args.author_id if item.strip()]),
+                    len(file_author_ids),
                     workers,
                     progress_every,
                 )

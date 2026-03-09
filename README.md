@@ -82,6 +82,7 @@ All commands are executed through `main.py`.
 ```bash
 python3 main.py --author-limit 100 --workers 4
 python3 main.py --author-id https://openalex.org/A1234567890
+python3 main.py --author-ids-file reports/sampling/development_set.json --workers 4
 ```
 
 ### 5.2 Export review summaries
@@ -187,4 +188,3 @@ Pre-annotation fields:
 4. Build pre-annotations.
 5. Human reviewers fill `final_label`.
 6. Export benchmark report and compare runs by stable metrics.
-
