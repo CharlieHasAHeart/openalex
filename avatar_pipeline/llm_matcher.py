@@ -78,6 +78,11 @@ class LlmMatcher:
                 "image_alt": c.image_alt,
                 "nearby_text": c.nearby_text,
                 "snippet": c.snippet,
+                "page_image_role": c.page_image_role,
+                "page_image_position_score": c.page_image_position_score,
+                "name_proximity_score": c.name_proximity_score,
+                "context_block_type": c.context_block_type,
+                "structure_evidence": c.structure_evidence,
                 "pre_rank_score": c.pre_rank_score,
                 "name_match_score": c.name_match_score,
                 "institution_match_score": c.institution_match_score,
@@ -101,6 +106,7 @@ class LlmMatcher:
             "Prioritize name match, institution match, and official profile/faculty page signals.\n"
             "Prefer candidates discovered from official orcid-linked pages, faculty/staff profile pages, "
             "or institutional people pages over generic search results.\n"
+            "Prefer images that appear in a profile header, faculty card, or name-matched people card over generic page images.\n"
             f"author={json.dumps(author_ctx, ensure_ascii=False)}\n"
             f"candidate_evidence={json.dumps(options, ensure_ascii=False)}"
         )

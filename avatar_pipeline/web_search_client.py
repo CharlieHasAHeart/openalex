@@ -37,6 +37,11 @@ class SearchCandidate:
     source_type: str | None = None
     discovery_score: float | None = None
     discovery_evidence: str | None = None
+    page_image_role: str | None = None
+    page_image_position_score: float | None = None
+    name_proximity_score: float | None = None
+    context_block_type: str | None = None
+    structure_evidence: str | None = None
 
 
 @dataclass(slots=True)
@@ -102,6 +107,44 @@ class WebSearchClient:
             return "lab_people_page"
         return "generic_search_result"
 
+    def _name_tokens(self, name: str) -> list[str]:
+        return [tok for tok in re.split(r"\s+", name.lower()) if tok and len(tok) > 1]
+
+    def _name_match_strength(self, text: str, display_name: str) -> float:
+        lower = text.lower()
+        name = display_name.strip().lower()
+        if not name:
+            return 0.0
+        if name in lower:
+            return 1.0
+        tokens = self._name_tokens(name)
+        if len(tokens) >= 2 and all(tok in lower for tok in tokens[:2]):
+            return 0.7
+        if any(tok in lower for tok in tokens):
+            return 0.35
+        return 0.0
+
+    def _is_noise_url(self, link: str) -> bool:
+        lower = link.lower()
+        if lower.startswith(("mailto:", "javascript:")):
+            return True
+        noisy = (
+            "login",
+            "auth",
+            "signin",
+            "signup",
+            "twitter.com",
+            "x.com",
+            "facebook.com",
+            "instagram.com",
+            "linkedin.com",
+            "doi.org",
+            "journal",
+            "publisher",
+            "citation",
+        )
+        return any(token in lower for token in noisy)
+
     def _score_profile_page(self, page: ProfilePageCandidate) -> float:
         score = float(page.discovery_score or 0.0)
         domain = (page.source_domain or "").lower()
@@ -157,12 +200,21 @@ class WebSearchClient:
                         continue
                     if "orcid.org" in link:
                         continue
+                    if self._is_noise_url(link):
+                        continue
+                    source_type = self._classify_source_type(link)
+                    if source_type == "generic_search_result":
+                        if not (
+                            ".edu" in link.lower()
+                            or any(k in link.lower() for k in ("university", "institute", "research", "/profile/", "/people/", "/faculty/", "/staff/"))
+                        ):
+                            continue
                     pages.append(
                         ProfilePageCandidate(
                             page_url=link,
                             source_domain=urlparse(link).hostname,
-                            source_type="orcid_external_link",
-                            discovery_score=5.0,
+                            source_type=source_type,
+                            discovery_score=5.0 if source_type != "generic_search_result" else 3.2,
                             discovery_evidence="found via orcid external link",
                         )
                     )
@@ -275,6 +327,141 @@ class WebSearchClient:
             if len(candidates) >= 5:
                 break
         return candidates
+
+    def _extract_images_from_block(
+        self,
+        block_html: str,
+        source_url: str,
+        role: str,
+        block_type: str,
+        position_score: float,
+        name_proximity: float,
+        structure_evidence: str,
+    ) -> list[SearchCandidate]:
+        candidates: list[SearchCandidate] = []
+        for match in re.finditer(r"<img[^>]+>", block_html, re.IGNORECASE | re.DOTALL):
+            tag = match.group(0)
+            src_match = re.search(r'src=["\']([^"\']+)["\']', tag, re.IGNORECASE)
+            if not src_match:
+                continue
+            raw_src = unescape(src_match.group(1)).strip()
+            if not raw_src or raw_src.startswith("data:"):
+                continue
+            lower_src = raw_src.lower()
+            if any(token in lower_src for token in ("logo", "banner", "sprite", "icon", "favicon", "social")):
+                role_value = "decorative_or_logo"
+            else:
+                role_value = role
+            image_url = urljoin(source_url, raw_src)
+            mime = _guess_mime_from_url(image_url)
+            if mime not in {"image/jpeg", "image/png", "image/webp"}:
+                continue
+            alt_match = re.search(r'alt=["\']([^"\']*)["\']', tag, re.IGNORECASE)
+            alt_text = self._clean_text(alt_match.group(1)) if alt_match else None
+            candidates.append(
+                SearchCandidate(
+                    image_url=image_url,
+                    source_url=source_url,
+                    title="",
+                    snippet="",
+                    mime=mime,
+                    source_domain=urlparse(source_url).hostname,
+                    image_alt=alt_text,
+                    page_image_role=role_value,
+                    page_image_position_score=position_score,
+                    name_proximity_score=name_proximity,
+                    context_block_type=block_type,
+                    structure_evidence=structure_evidence,
+                )
+            )
+        return candidates
+
+    def _structured_extract_image_candidates(
+        self,
+        source_url: str,
+        page_html: str,
+        author: AuthorRecord,
+    ) -> list[SearchCandidate]:
+        lowered_html = page_html.lower()
+        display_name = author.display_name or ""
+        path = urlparse(source_url).path.lower()
+        is_profile_like = any(token in (path + " " + lowered_html[:2000]) for token in ("faculty", "profile", "staff", "person", "researcher"))
+        is_people_like = any(token in (path + " " + lowered_html[:2000]) for token in ("people", "directory", "team", "group", "members"))
+
+        collected: list[SearchCandidate] = []
+
+        # 1) Name-matched card/block extraction.
+        block_pattern = re.compile(r"<(div|section|article|li)[^>]*>(.*?)</\\1>", re.IGNORECASE | re.DOTALL)
+        keyword = re.compile(r"(people|person|profile|faculty|staff|member|researcher|team|group)", re.IGNORECASE)
+        for block_match in block_pattern.finditer(page_html):
+            block = block_match.group(0)
+            if len(block) > 12000:
+                continue
+            if not keyword.search(block):
+                continue
+            name_score = self._name_match_strength(block, display_name)
+            if name_score < 0.35:
+                continue
+            block_type = "people_card" if is_people_like else ("faculty_card" if is_profile_like else "name_matched_block")
+            collected.extend(
+                self._extract_images_from_block(
+                    block,
+                    source_url,
+                    role="card_headshot",
+                    block_type=block_type,
+                    position_score=0.85,
+                    name_proximity=name_score,
+                    structure_evidence="name matched card-like block",
+                )
+            )
+            if len(collected) >= 6:
+                break
+
+        # 2) Profile header / top-of-page extraction.
+        if len(collected) < 4 and is_profile_like:
+            top_slice = page_html[: max(1200, len(page_html) // 3)]
+            collected.extend(
+                self._extract_images_from_block(
+                    top_slice,
+                    source_url,
+                    role="profile_headshot",
+                    block_type="profile_header",
+                    position_score=0.9,
+                    name_proximity=self._name_match_strength(top_slice, display_name),
+                    structure_evidence="profile-like page top/header region",
+                )
+            )
+
+        # 3) Fallback generic extraction (must remain available).
+        if len(collected) < 3:
+            generic = self._extract_image_candidates(source_url, page_html)
+            for item in generic:
+                item.page_image_role = item.page_image_role or "generic_page_image"
+                item.page_image_position_score = item.page_image_position_score if item.page_image_position_score is not None else 0.3
+                item.name_proximity_score = item.name_proximity_score if item.name_proximity_score is not None else self._name_match_strength(page_html[:2000], display_name)
+                item.context_block_type = item.context_block_type or "generic_page"
+                item.structure_evidence = item.structure_evidence or "generic image extraction fallback"
+            collected.extend(generic)
+
+        # Deduplicate by normalized URL and keep strongest structure score.
+        dedup: dict[str, SearchCandidate] = {}
+        for item in collected:
+            key = item.image_url.split("#")[0]
+            existing = dedup.get(key)
+            if existing is None:
+                dedup[key] = item
+                continue
+            old_score = float(existing.page_image_position_score or 0.0) + float(existing.name_proximity_score or 0.0)
+            new_score = float(item.page_image_position_score or 0.0) + float(item.name_proximity_score or 0.0)
+            if new_score > old_score:
+                dedup[key] = item
+
+        ranked = list(dedup.values())
+        ranked.sort(
+            key=lambda c: float(c.page_image_position_score or 0.0) + float(c.name_proximity_score or 0.0),
+            reverse=True,
+        )
+        return ranked[:8]
 
     def _clean_text(self, value: str | None) -> str | None:
         if not value:
@@ -469,7 +656,7 @@ class WebSearchClient:
                 page_resp = self._http.request("GET", page.page_url)
             except Exception:
                 continue
-            for item in self._extract_image_candidates(page.page_url, page_resp.text):
+            for item in self._structured_extract_image_candidates(page.page_url, page_resp.text, author):
                 item.title = page.title or ""
                 item.snippet = page.snippet or ""
                 item.page_title = page.title or item.page_title

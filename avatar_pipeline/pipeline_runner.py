@@ -276,6 +276,11 @@ class PipelineRunner:
                         "source_type": chosen.source_type,
                         "discovery_score": chosen.discovery_score,
                         "discovery_evidence": chosen.discovery_evidence,
+                        "page_image_role": chosen.page_image_role,
+                        "page_image_position_score": chosen.page_image_position_score,
+                        "name_proximity_score": chosen.name_proximity_score,
+                        "context_block_type": chosen.context_block_type,
+                        "structure_evidence": chosen.structure_evidence,
                         "source_url": chosen.source_url,
                         "image_url": chosen.image_url,
                         "source_domain": chosen.source_domain,
@@ -426,6 +431,25 @@ class PipelineRunner:
         discovery_score = float(candidate.discovery_score or 0.0)
         trust_score += min(discovery_score * 0.35, 1.8)
 
+        structure_score = 0.0
+        role = (candidate.page_image_role or "").lower()
+        if role == "profile_headshot":
+            structure_score += 1.4
+        elif role == "card_headshot":
+            structure_score += 1.1
+        elif role == "decorative_or_logo":
+            structure_score -= 1.8
+        else:
+            structure_score += 0.1
+
+        structure_score += min(float(candidate.page_image_position_score or 0.0), 1.0) * 0.9
+        structure_score += min(float(candidate.name_proximity_score or 0.0), 1.0) * 1.2
+        block_type = (candidate.context_block_type or "").lower()
+        if block_type in {"people_card", "faculty_card", "profile_header", "name_matched_block"}:
+            structure_score += 0.8
+        elif block_type == "generic_page":
+            structure_score += 0.1
+
         image_score = 0.0
         if candidate.is_valid_image is False:
             image_score -= 2.0
@@ -459,7 +483,7 @@ class PipelineRunner:
             image_score -= 0.3
 
         candidate.image_precheck_score = image_score
-        pre_rank = name_score + inst_score + trust_score + image_score
+        pre_rank = name_score + inst_score + trust_score + image_score + structure_score
         return name_score, inst_score, trust_score, pre_rank
 
     def _rank_candidates(self, author: AuthorRecord, candidates: list) -> list[tuple[int, object]]:
