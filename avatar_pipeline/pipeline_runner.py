@@ -36,6 +36,7 @@ class PipelineRunner:
         self._run_id = run_id
         self._stats: Counter[str] = Counter()
         self._context_enrich_limit = 5
+        self._image_enrich_limit = 5
         self._llm_top_k = 5
 
     @property
@@ -183,10 +184,20 @@ class PipelineRunner:
                 str(exc),
             )
 
-        ranked_with_index = self._rank_candidates(author, candidates)
-        top_ranked = ranked_with_index[: max(1, min(self._llm_top_k, len(ranked_with_index)))]
-        top_index_to_original = [idx for idx, _ in top_ranked]
-        llm_candidates = [candidate for _, candidate in top_ranked]
+        try:
+            candidates = self._web_search.enrich_candidates_image_metadata(
+                candidates,
+                limit=self._image_enrich_limit,
+                allowed_mime=self._config.allowed_mime,
+                min_edge_px=self._config.min_image_edge_px,
+            )
+        except Exception as exc:
+            logger.error(
+                "pipeline_candidate_image_enrich_failed run_id=%s author_id=%s error_message=%s",
+                self._run_id,
+                author.author_id,
+                str(exc),
+            )
 
         candidate_id_by_index: dict[int, int] = {}
         if self._run_id:
@@ -207,6 +218,14 @@ class PipelineRunner:
                         snippet=raw_candidate.snippet,
                         nearby_text=raw_candidate.nearby_text,
                         image_alt=raw_candidate.image_alt,
+                        mime_type=raw_candidate.mime,
+                        width=raw_candidate.width,
+                        height=raw_candidate.height,
+                        size_bytes=raw_candidate.size_bytes,
+                        face_count=raw_candidate.face_count,
+                        is_portrait=raw_candidate.is_portrait,
+                        is_valid_image=raw_candidate.is_valid_image,
+                        invalid_reason=raw_candidate.invalid_reason,
                     )
                     candidate_id_by_index[idx] = candidate_id
                 except Exception as exc:
@@ -218,6 +237,11 @@ class PipelineRunner:
                         raw_candidate.source_url,
                         str(exc),
                     )
+
+        ranked_with_index = self._rank_candidates(author, candidates)
+        top_ranked = ranked_with_index[: max(1, min(self._llm_top_k, len(ranked_with_index)))]
+        top_index_to_original = [idx for idx, _ in top_ranked]
+        llm_candidates = [candidate for _, candidate in top_ranked]
 
         decision = self._matcher.choose_best(author, llm_candidates)
         if not decision:
@@ -252,6 +276,15 @@ class PipelineRunner:
                         "name_match_score": chosen.name_match_score,
                         "institution_match_score": chosen.institution_match_score,
                         "source_trust_score": chosen.source_trust_score,
+                        "image_precheck_score": chosen.image_precheck_score,
+                        "mime_type": chosen.mime,
+                        "width": chosen.width,
+                        "height": chosen.height,
+                        "size_bytes": chosen.size_bytes,
+                        "face_count": chosen.face_count,
+                        "is_portrait": chosen.is_portrait,
+                        "is_valid_image": chosen.is_valid_image,
+                        "invalid_reason": chosen.invalid_reason,
                     },
                 )
             except Exception as exc:
@@ -363,7 +396,40 @@ class PipelineRunner:
         if candidate.snippet and any(k in candidate.snippet.lower() for k in ("professor", "faculty", "researcher", "profile")):
             trust_score += 0.4
 
-        pre_rank = name_score + inst_score + trust_score
+        image_score = 0.0
+        if candidate.is_valid_image is False:
+            image_score -= 2.0
+        elif candidate.is_valid_image is True:
+            image_score += 0.8
+
+        if candidate.invalid_reason and (
+            candidate.invalid_reason.startswith("invalid_image_mime:")
+            or candidate.invalid_reason in {"invalid_image_too_small", "image_metadata_fetch_failed", "image_dimension_unknown"}
+        ):
+            image_score -= 1.8
+        if candidate.width and candidate.height:
+            min_edge = min(candidate.width, candidate.height)
+            if min_edge >= self._config.min_image_edge_px:
+                image_score += 0.8
+            else:
+                image_score -= 1.2
+            aspect = max(candidate.width / candidate.height, candidate.height / candidate.width)
+            if aspect > 4.5:
+                image_score -= 1.5
+            elif aspect > 2.0:
+                image_score -= 0.4
+            else:
+                image_score += 0.3
+        if candidate.face_count is not None:
+            if candidate.face_count == 1:
+                image_score += 0.5
+            elif candidate.face_count > 1:
+                image_score -= 0.3
+        if candidate.is_portrait is False:
+            image_score -= 0.3
+
+        candidate.image_precheck_score = image_score
+        pre_rank = name_score + inst_score + trust_score + image_score
         return name_score, inst_score, trust_score, pre_rank
 
     def _rank_candidates(self, author: AuthorRecord, candidates: list) -> list[tuple[int, object]]:

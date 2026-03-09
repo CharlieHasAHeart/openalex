@@ -79,6 +79,13 @@ class LlmMatcher:
                 "name_match_score": c.name_match_score,
                 "institution_match_score": c.institution_match_score,
                 "source_trust_score": c.source_trust_score,
+                "image_precheck_score": c.image_precheck_score,
+                "mime_type": c.mime,
+                "width": c.width,
+                "height": c.height,
+                "size_bytes": c.size_bytes,
+                "is_valid_image": c.is_valid_image,
+                "invalid_reason": c.invalid_reason,
             }
             for i, c in enumerate(candidates)
         ]

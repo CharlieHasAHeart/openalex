@@ -26,6 +26,14 @@ class SearchCandidate:
     pre_rank_score: float | None = None
     source_domain: str | None = None
     page_title: str | None = None
+    width: int | None = None
+    height: int | None = None
+    size_bytes: int | None = None
+    face_count: int | None = None
+    is_portrait: bool | None = None
+    is_valid_image: bool | None = None
+    invalid_reason: str | None = None
+    image_precheck_score: float | None = None
 
 
 def _guess_mime_from_url(url: str) -> str:
@@ -204,6 +212,106 @@ class WebSearchClient:
                 candidate.nearby_text = context.get("nearby_text")
             except Exception:
                 candidate.page_title = candidate.page_title or candidate.title
+        return candidates
+
+    def _parse_png_size(self, content: bytes) -> tuple[int, int] | None:
+        if len(content) < 24 or content[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        width = int.from_bytes(content[16:20], "big")
+        height = int.from_bytes(content[20:24], "big")
+        return width, height
+
+    def _parse_jpeg_size(self, content: bytes) -> tuple[int, int] | None:
+        if len(content) < 4 or content[:2] != b"\xff\xd8":
+            return None
+        i = 2
+        while i + 9 < len(content):
+            if content[i] != 0xFF:
+                i += 1
+                continue
+            marker = content[i + 1]
+            i += 2
+            if marker in (0xD8, 0xD9):
+                continue
+            if i + 2 > len(content):
+                break
+            seg_len = int.from_bytes(content[i:i + 2], "big")
+            if seg_len < 2 or i + seg_len > len(content):
+                break
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                if i + 7 > len(content):
+                    break
+                height = int.from_bytes(content[i + 3:i + 5], "big")
+                width = int.from_bytes(content[i + 5:i + 7], "big")
+                return width, height
+            i += seg_len
+        return None
+
+    def _parse_webp_size(self, content: bytes) -> tuple[int, int] | None:
+        if len(content) < 30 or content[0:4] != b"RIFF" or content[8:12] != b"WEBP":
+            return None
+        chunk = content[12:16]
+        if chunk == b"VP8X" and len(content) >= 30:
+            width = 1 + int.from_bytes(content[24:27], "little")
+            height = 1 + int.from_bytes(content[27:30], "little")
+            return width, height
+        return None
+
+    def _parse_image_size(self, content: bytes, mime: str) -> tuple[int | None, int | None]:
+        parser_by_mime = {
+            "image/png": self._parse_png_size,
+            "image/jpeg": self._parse_jpeg_size,
+            "image/webp": self._parse_webp_size,
+        }
+        parser = parser_by_mime.get(mime)
+        if parser is None:
+            return None, None
+        size = parser(content)
+        if size is None:
+            return None, None
+        return size
+
+    def enrich_candidates_image_metadata(
+        self,
+        candidates: list[SearchCandidate],
+        limit: int = 5,
+        allowed_mime: set[str] | None = None,
+        min_edge_px: int = 200,
+    ) -> list[SearchCandidate]:
+        if not candidates:
+            return candidates
+        max_items = max(0, limit)
+        allowed = allowed_mime or {"image/jpeg", "image/png", "image/webp"}
+        for candidate in candidates[:max_items]:
+            try:
+                content, mime = self.download_image(candidate.image_url)
+                candidate.mime = mime or candidate.mime
+                candidate.size_bytes = len(content)
+                candidate.width, candidate.height = self._parse_image_size(content, candidate.mime)
+                if candidate.width and candidate.height:
+                    candidate.is_portrait = candidate.height >= candidate.width
+
+                if candidate.size_bytes <= 0:
+                    candidate.is_valid_image = False
+                    candidate.invalid_reason = "empty_image_bytes"
+                elif candidate.mime not in allowed:
+                    candidate.is_valid_image = False
+                    candidate.invalid_reason = f"invalid_image_mime:{candidate.mime}"
+                elif candidate.width is None or candidate.height is None:
+                    candidate.is_valid_image = False
+                    candidate.invalid_reason = "image_dimension_unknown"
+                elif min(candidate.width, candidate.height) < min_edge_px:
+                    candidate.is_valid_image = False
+                    candidate.invalid_reason = "invalid_image_too_small"
+                elif candidate.width > 0 and candidate.height > 0 and max(candidate.width / candidate.height, candidate.height / candidate.width) > 4.5:
+                    candidate.is_valid_image = False
+                    candidate.invalid_reason = "invalid_image_extreme_aspect_ratio"
+                else:
+                    candidate.is_valid_image = True
+                    candidate.invalid_reason = None
+            except Exception:
+                candidate.is_valid_image = False
+                candidate.invalid_reason = "image_metadata_fetch_failed"
         return candidates
 
     def search_image_candidates(self, author: AuthorRecord) -> list[SearchCandidate]:
