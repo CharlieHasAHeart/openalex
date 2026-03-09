@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+from pathlib import Path
 from collections import Counter
 from urllib.parse import urlparse
 
@@ -44,6 +45,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--benchmark-package-name", default="development", help="Package name prefix for outputs.")
     parser.add_argument("--package-output-dir", default="reports/benchmark_packages", help="Output directory for benchmark package artifacts.")
     parser.add_argument("--validate-annotations-file", default="", help="Validate annotation JSONL file for a benchmark package.")
+    parser.add_argument("--build-preannotations", action="store_true", help="Build pre-annotations for a benchmark package.")
+    parser.add_argument("--benchmark-package-file", default="", help="Path to benchmark package JSON file.")
+    parser.add_argument("--preannotation-output-dir", default="reports/benchmark_packages", help="Output directory for pre-annotations.")
     return parser.parse_args()
 
 
@@ -234,6 +238,13 @@ def main() -> int:
         load_sampling_set,
         validate_annotation_file,
     )
+    from avatar_pipeline.preannotation import (
+        build_preannotation_rows,
+        load_benchmark_package,
+        summarize_preannotations,
+        write_preannotation_file,
+        write_preannotation_review_sheet,
+    )
     from avatar_pipeline.evaluation import format_review_export, sample_decisions, summarize_decisions
     from avatar_pipeline.http import RateLimiter
     from avatar_pipeline.pg_repository import PgRepository
@@ -382,6 +393,32 @@ def main() -> int:
             logger.exception("annotation_validation_failed error=%s", exc)
             return 2
         print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.build_preannotations:
+        if not args.benchmark_package_file.strip():
+            logger.error("benchmark_package_file_required")
+            return 2
+        package_rows = load_benchmark_package(args.benchmark_package_file.strip())
+        pre_rows = build_preannotation_rows(package_rows)
+        output_dir = args.preannotation_output_dir.strip() or "reports/benchmark_packages"
+        base_name = Path(args.benchmark_package_file.strip()).stem.replace("_package", "")
+        pre_path = str(Path(output_dir) / f"{base_name}_preannotations.json")
+        sheet_path = str(Path(output_dir) / f"{base_name}_preannotation_review_sheet.csv")
+        write_preannotation_file(pre_rows, pre_path)
+        write_preannotation_review_sheet(pre_rows, sheet_path)
+        summary = summarize_preannotations(pre_rows)
+        print(
+            json.dumps(
+                {
+                    "preannotations_path": pre_path,
+                    "review_sheet_path": sheet_path,
+                    "summary": summary,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
 
     try:

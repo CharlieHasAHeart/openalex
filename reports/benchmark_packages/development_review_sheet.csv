@@ -406,104 +406,104 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5072143784,Kerrie Foxwell-Norton,Social Sciences,OTHER,education,ascii_only,rare,short,Social Sciences|OTHER|ascii_only|rare
 5103085778,Alvaro Moreno,Social Sciences,OTHER,education,ascii_only,rare,short,Social Sciences|OTHER|ascii_only|rare
 5072029752,Rosalie Steinberg,Social Sciences,OTHER,healthcare,ascii_only,rare,medium,Social Sciences|OTHER|ascii_only|rare
-5056335906,Ferrán Sanz,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5003374296,Santiago Garcı́a-Vallvé,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5020305163,Mats Hellström,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5088889470,Elena González‐Fandos,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5084834995,Bart‐Jan Kroesen,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5028615475,René Staritzbichler,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5032748219,Oya Bozdağ‐Dündar,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5086071381,Tuğba Önal-Süzek,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5028031403,Luís Cristóvão Pôrto,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5017159595,Meei‐Ling Sheu,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5087121230,Orlando Moreira‐Filho,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5082003101,Anaı̈s Baudot,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5078317173,O. Mäkelä,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5015184122,Markus J. Herrgård,Life Sciences,OTHER,nonprofit,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5060128303,Jiřı́ Neužil,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5069362592,Pavla Postlerová,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5101500129,Eun‐Young Jung,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5075130498,Şüle Yılmaz,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5109176613,M. Bar‐Joseph,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5023486091,Oliver Nüße,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5076868166,Anne‐Marie van Dam,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5068937120,Sílvia Carbonell Sala,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5049050220,Alberto Jiménez,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5067231807,Hans‐Joachim Pflüger,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5015739072,Cátia Igreja,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5003229897,Enéas Carvalho,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5058943345,Attila Mészáros,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5090354089,Won‐Seok Kim,Life Sciences,OTHER,healthcare,non_ascii,rare,long,Life Sciences|OTHER|non_ascii|rare
-5015311189,François Verrey,Life Sciences,OTHER,unknown,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5024965742,Diego García‐Gonzalo,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5027745980,Marc M. S. M. Wösten,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5091071063,Santiago Mas‐Coma,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5053612326,Jean‐Louis Petit,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5063444804,Olaf Rieß,Life Sciences,OTHER,facility,non_ascii,rare,long,Life Sciences|OTHER|non_ascii|rare
-5028725340,Petr Pyšek,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5082432867,Xavier Declèves,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5000281775,Mathias François,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
-5069635976,Germán Gallardo,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5043313296,Ulya Badıllı,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5087695048,Ariadna Sitjà‐Bobadilla,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5066189310,Marina Brasó‐Vives,Life Sciences,OTHER,nonprofit,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
-5063068418,Jerzy Piwoński,Health Sciences,OTHER,facility,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5017329070,Renata Talar‐Wojnarowska,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5069347238,Montserrat Rué,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5056019724,Harri Hemilä,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5059907471,Sun‐Ja Kim,Health Sciences,OTHER,company,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5091163773,Snævar Sigurðsson,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5067613513,Halil İbrahim Cicioğlu,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5043570965,Per‐Anders Abrahamsson,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5038959612,Jung‐Hyang Sur,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5065975130,Rafael Yagüe Ballester,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5016867507,Víctor Kravchenko,Health Sciences,OTHER,facility,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5040846342,Vojko Kanič,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5107499733,Xavier Castellsagué,Health Sciences,OTHER,other,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
-5081004603,Sanna-Maria Käkönen,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5024867067,Balázs Harangi,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5089654641,Moisés Cohen,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5076237266,Shu‐Wei Kao,Health Sciences,OTHER,healthcare,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5075495173,Christelle Koechlin‐Ramonatxo,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5070248463,Lars J. Bjertnæs,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5014232204,Juan Carlos Martínez Escoriza,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5074603564,Tania B. Huedo–Medina,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5030449293,Yeşim Kirazlı,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5074596945,Francisco Gudé,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5030510453,Jacek Jawień,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5084326780,Sana M. Al‐Khatib,Health Sciences,OTHER,education,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
-5069263136,Alberto Fernández‐Villar,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5101521495,Dong‐Wook Park,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5072839114,Vínicius Fernandes Cruzat,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5008503977,Cécile Cassan,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5076056037,Jésica Menéndez-Signorini,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5063916679,Eвгени Григоров,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5016301782,Ching‐Hung Lin,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5084744120,Agnès Noël,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5009701938,Esmeray Mutlu Yılmaz,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5071634647,Márcia Nery,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5030462014,Christopher Etherton‐Beer,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5010259346,José Luis Maté‐Muñoz,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5060610300,Riikka Pyhälä,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5027654738,Marie‐Christine Copin,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5080137453,Bruno Salles Sotto‐Maior,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5028012490,Michael Schäfers,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5030260744,Marie‐José Butel,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5005371655,Jean‐Bosco Ouédraogo,Health Sciences,OTHER,facility,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5041699314,Pål Suhrke,Health Sciences,OTHER,healthcare,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5080654199,Ricardo Sánchez,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5018763224,Hugo Barrios-García,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5003545733,Marta Ruiz‐Ortega,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5031788901,Daniela Moşoiu,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5063608418,Jan Piťha,Health Sciences,OTHER,healthcare,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
-5012789959,Karl‐Christian Bergmann,Health Sciences,OTHER,education,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
-5022094735,Rosário Dominguez Crespo Hirata,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5069300318,Marko Hočevar,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5087451143,Monika Arenbergerová,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5032333083,A. Çelik,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
-5070616324,Antonio Cabrera de León,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5046244732,Sonia de Pascual‐Teresa,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
-5065458927,Philippe Büscher,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5056335906,Ferr谩n Sanz,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5003374296,Santiago Garc谋虂a-Vallv茅,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5020305163,Mats Hellstr枚m,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5088889470,Elena Gonz谩lez鈥怓andos,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5084834995,Bart鈥怞an Kroesen,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5028615475,Ren茅 Staritzbichler,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5032748219,Oya Bozda臒鈥怐眉ndar,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5086071381,Tu臒ba 脰nal-S眉zek,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5028031403,Lu铆s Crist贸v茫o P么rto,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5017159595,Meei鈥怢ing Sheu,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5087121230,Orlando Moreira鈥怓ilho,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5082003101,Ana谋虉s Baudot,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5078317173,O. M盲kel盲,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5015184122,Markus J. Herrg氓rd,Life Sciences,OTHER,nonprofit,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5060128303,Ji艡谋虂 Neu啪il,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5069362592,Pavla Postlerov谩,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5101500129,Eun鈥怸oung Jung,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5075130498,艦眉le Y谋lmaz,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5109176613,M. Bar鈥怞oseph,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5023486091,Oliver N眉脽e,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5076868166,Anne鈥怣arie van Dam,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5068937120,S铆lvia Carbonell Sala,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5049050220,Alberto Jim茅nez,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5067231807,Hans鈥怞oachim Pfl眉ger,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5015739072,C谩tia Igreja,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5003229897,En茅as Carvalho,Life Sciences,OTHER,facility,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5058943345,Attila M茅sz谩ros,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5090354089,Won鈥怱eok Kim,Life Sciences,OTHER,healthcare,non_ascii,rare,long,Life Sciences|OTHER|non_ascii|rare
+5015311189,Fran莽ois Verrey,Life Sciences,OTHER,unknown,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5024965742,Diego Garc铆a鈥怗onzalo,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5027745980,Marc M. S. M. W枚sten,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5091071063,Santiago Mas鈥怌oma,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5053612326,Jean鈥怢ouis Petit,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5063444804,Olaf Rie脽,Life Sciences,OTHER,facility,non_ascii,rare,long,Life Sciences|OTHER|non_ascii|rare
+5028725340,Petr Py拧ek,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5082432867,Xavier Decl猫ves,Life Sciences,OTHER,other,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5000281775,Mathias Fran莽ois,Life Sciences,OTHER,education,non_ascii,rare,medium,Life Sciences|OTHER|non_ascii|rare
+5069635976,Germ谩n Gallardo,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5043313296,Ulya Bad谋ll谋,Life Sciences,OTHER,education,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5087695048,Ariadna Sitj脿鈥怋obadilla,Life Sciences,OTHER,other,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5066189310,Marina Bras贸鈥怴ives,Life Sciences,OTHER,nonprofit,non_ascii,rare,short,Life Sciences|OTHER|non_ascii|rare
+5063068418,Jerzy Piwo艅ski,Health Sciences,OTHER,facility,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5017329070,Renata Talar鈥怶ojnarowska,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5069347238,Montserrat Ru茅,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5056019724,Harri Hemil盲,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5059907471,Sun鈥怞a Kim,Health Sciences,OTHER,company,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5091163773,Sn忙var Sigur冒sson,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5067613513,Halil 陌brahim Cicio臒lu,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5043570965,Per鈥怉nders Abrahamsson,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5038959612,Jung鈥怘yang Sur,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5065975130,Rafael Yag眉e Ballester,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5016867507,V铆ctor Kravchenko,Health Sciences,OTHER,facility,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5040846342,Vojko Kani膷,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5107499733,Xavier Castellsagu茅,Health Sciences,OTHER,other,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
+5081004603,Sanna-Maria K盲k枚nen,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5024867067,Bal谩zs Harangi,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5089654641,Mois茅s Cohen,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5076237266,Shu鈥怶ei Kao,Health Sciences,OTHER,healthcare,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5075495173,Christelle Koechlin鈥怰amonatxo,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5070248463,Lars J. Bjertn忙s,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5014232204,Juan Carlos Mart铆nez Escoriza,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5074603564,Tania B. Huedo鈥揗edina,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5030449293,Ye艧im Kirazl谋,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5074596945,Francisco Gud茅,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5030510453,Jacek Jawie艅,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5084326780,Sana M. Al鈥怟hatib,Health Sciences,OTHER,education,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
+5069263136,Alberto Fern谩ndez鈥怴illar,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5101521495,Dong鈥怶ook Park,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5072839114,V铆nicius Fernandes Cruzat,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5008503977,C茅cile Cassan,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5076056037,J茅sica Men茅ndez-Signorini,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5063916679,E胁谐械薪懈 袚褉懈谐芯褉芯胁,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5016301782,Ching鈥怘ung Lin,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5084744120,Agn猫s No毛l,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5009701938,Esmeray Mutlu Y谋lmaz,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5071634647,M谩rcia Nery,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5030462014,Christopher Etherton鈥怋eer,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5010259346,Jos茅 Luis Mat茅鈥怣u帽oz,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5060610300,Riikka Pyh盲l盲,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5027654738,Marie鈥怌hristine Copin,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5080137453,Bruno Salles Sotto鈥怣aior,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5028012490,Michael Sch盲fers,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5030260744,Marie鈥怞os茅 Butel,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5005371655,Jean鈥怋osco Ou茅draogo,Health Sciences,OTHER,facility,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5041699314,P氓l Suhrke,Health Sciences,OTHER,healthcare,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5080654199,Ricardo S谩nchez,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5018763224,Hugo Barrios-Garc铆a,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5003545733,Marta Ruiz鈥怬rtega,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5031788901,Daniela Mo艧oiu,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5063608418,Jan Pi钮ha,Health Sciences,OTHER,healthcare,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
+5012789959,Karl鈥怌hristian Bergmann,Health Sciences,OTHER,education,non_ascii,rare,long,Health Sciences|OTHER|non_ascii|rare
+5022094735,Ros谩rio Dominguez Crespo Hirata,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5069300318,Marko Ho膷evar,Health Sciences,OTHER,education,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5087451143,Monika Arenbergerov谩,Health Sciences,OTHER,education,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5032333083,A. 脟elik,Health Sciences,OTHER,other,non_ascii,rare,short,Health Sciences|OTHER|non_ascii|rare
+5070616324,Antonio Cabrera de Le贸n,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5046244732,Sonia de Pascual鈥怲eresa,Health Sciences,OTHER,other,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
+5065458927,Philippe B眉scher,Health Sciences,OTHER,healthcare,non_ascii,rare,medium,Health Sciences|OTHER|non_ascii|rare
 5009691281,Masahiko Yano,Health Sciences,JP,healthcare,ascii_only,rare,medium,Health Sciences|JP|ascii_only|rare
 5016501131,Tetsuya Kaneko,Health Sciences,JP,healthcare,ascii_only,rare,medium,Health Sciences|JP|ascii_only|rare
 5009043843,Toshio Higashi,Health Sciences,JP,education,ascii_only,rare,medium,Health Sciences|JP|ascii_only|rare
@@ -1405,56 +1405,56 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5038177364,K. Murakami,Physical Sciences,JP,other,ascii_only,rare,medium,Physical Sciences|JP|ascii_only|rare
 5017510216,Yutaka Sasaki,Physical Sciences,JP,education,ascii_only,rare,medium,Physical Sciences|JP|ascii_only|rare
 5029132443,Y. Yamauchi,Physical Sciences,JP,facility,ascii_only,rare,short,Physical Sciences|JP|ascii_only|rare
-5053705772,Andor Kormányos,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5089912211,Georges‐Pierre Bonneau,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5005232497,A. R. Goñi,Physical Sciences,OTHER,nonprofit,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5079235385,Barbara Hachuła,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5010821793,Byoung‐Yong Chang,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5103005454,J. J. Gaardhøje,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5066913783,Eduardo Mazoni Andrade Marçal Mendes,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5020926080,Luı́s P. Viegas,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5090063965,Gaël De Paëpe,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5081108042,François Jouve,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5084862224,Ігор Прокопенко,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5076718925,Carlos Camacho-Gómez,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5062646838,Thomas Bäck,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5016505293,M. Tápai,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5069210138,Núria Rico,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5016945609,Cheng‐Shang Chang,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5022698890,Grzegorz Chrupała,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5071649205,Mohammad Hossein Karimi‐Jafari,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5101406730,Aleksandar Djordjević,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5014796819,André Pilastri,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5024412934,Antonio Jesús Banegas‐Luna,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5023064810,Der‐Yuh Lin,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5008279218,María Francisco,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5008410960,Chun‐Cheng Lin,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5078565887,Hans Janßen,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5102978003,José Costa Pereira,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5039352815,M. Çakmak,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5029647641,O. Martı́nez,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5075675047,Sven Hovmöller,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5010155676,Paulo Lisböa,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5041958955,Dušan Joksimović,Physical Sciences,OTHER,other,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5037807874,J. Bertrán,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5103036562,Michal Křı́žek,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5043134872,Milutin Pejović,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5087416201,Ángel Ferrández,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5079816610,Christiane Lange‐Küttner,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5022256076,Georges Dénès,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5067978311,А. V. Kosobutsky,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5090800877,Horácio Dorigan Moya,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5088897896,Jean‐François Brière,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5078811011,Bekir Sami Yilbaş,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5041694418,А.Г. Кочур,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5084169592,Paweł Świętojański,Physical Sciences,OTHER,company,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5085649476,V. Alan Kostelecký,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5032426541,Andrés Almansa,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
-5065869008,Gaëlle Loosli,Physical Sciences,OTHER,company,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5040262351,Olcay Taner Yıldız,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5067961035,Elena M. De‐Juan‐Pardo,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5052913606,Enrique M. Cabaleiro‐Lago,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
-5064331120,Dong‐Her Shih,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5053705772,Andor Korm谩nyos,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5089912211,Georges鈥怭ierre Bonneau,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5005232497,A. R. Go帽i,Physical Sciences,OTHER,nonprofit,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5079235385,Barbara Hachu艂a,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5010821793,Byoung鈥怸ong Chang,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5103005454,J. J. Gaardh酶je,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5066913783,Eduardo Mazoni Andrade Mar莽al Mendes,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5020926080,Lu谋虂s P. Viegas,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5090063965,Ga毛l De Pa毛pe,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5081108042,Fran莽ois Jouve,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5084862224,袉谐芯褉 袩褉芯泻芯锌械薪泻芯,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5076718925,Carlos Camacho-G贸mez,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5062646838,Thomas B盲ck,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5016505293,M. T谩pai,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5069210138,N煤ria Rico,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5016945609,Cheng鈥怱hang Chang,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5022698890,Grzegorz Chrupa艂a,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5071649205,Mohammad Hossein Karimi鈥怞afari,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5101406730,Aleksandar Djordjevi膰,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5014796819,Andr茅 Pilastri,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5024412934,Antonio Jes煤s Banegas鈥怢una,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5023064810,Der鈥怸uh Lin,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5008279218,Mar铆a Francisco,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5008410960,Chun鈥怌heng Lin,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5078565887,Hans Jan脽en,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5102978003,Jos茅 Costa Pereira,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5039352815,M. 脟akmak,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5029647641,O. Mart谋虂nez,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5075675047,Sven Hovm枚ller,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5010155676,Paulo Lisb枚a,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5041958955,Du拧an Joksimovi膰,Physical Sciences,OTHER,other,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5037807874,J. Bertr谩n,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5103036562,Michal K艡谋虂啪ek,Physical Sciences,OTHER,facility,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5043134872,Milutin Pejovi膰,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5087416201,脕ngel Ferr谩ndez,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5079816610,Christiane Lange鈥怟眉ttner,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5022256076,Georges D茅n猫s,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5067978311,袗. V. Kosobutsky,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5090800877,Hor谩cio Dorigan Moya,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5088897896,Jean鈥怓ran莽ois Bri猫re,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5078811011,Bekir Sami Yilba艧,Physical Sciences,OTHER,education,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5041694418,袗.袚. 袣芯褔褍褉,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5084169592,Pawe艂 艢wi臋toja艅ski,Physical Sciences,OTHER,company,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5085649476,V. Alan Kosteleck媒,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5032426541,Andr茅s Almansa,Physical Sciences,OTHER,other,non_ascii,rare,medium,Physical Sciences|OTHER|non_ascii|rare
+5065869008,Ga毛lle Loosli,Physical Sciences,OTHER,company,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5040262351,Olcay Taner Y谋ld谋z,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5067961035,Elena M. De鈥怞uan鈥怭ardo,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5052913606,Enrique M. Cabaleiro鈥怢ago,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
+5064331120,Dong鈥怘er Shih,Physical Sciences,OTHER,education,non_ascii,rare,short,Physical Sciences|OTHER|non_ascii|rare
 5030075249,J. S. Dagpunar,Physical Sciences,GB,education,ascii_only,rare,short,Physical Sciences|GB|ascii_only|rare
 5001878365,Michael Zakharyaschev,Physical Sciences,GB,education,ascii_only,rare,medium,Physical Sciences|GB|ascii_only|rare
 5068408717,Enrico Motta,Physical Sciences,GB,education,ascii_only,rare,medium,Physical Sciences|GB|ascii_only|rare
@@ -1509,14 +1509,14 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5045738123,Martin Huber,Life Sciences,UNKNOWN,unknown,ascii_only,rare,medium,Life Sciences|UNKNOWN|ascii_only|rare
 5081509646,Sheldon Rowan,Life Sciences,UNKNOWN,unknown,ascii_only,rare,short,Life Sciences|UNKNOWN|ascii_only|rare
 5100615576,Jingyu Wang,Life Sciences,UNKNOWN,unknown,ascii_only,rare,medium,Life Sciences|UNKNOWN|ascii_only|rare
-5007656938,Jiřı́ Matas,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5001797888,Michał Mackiewicz,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5084352657,Miguel Angel Medina‐Pérez,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5042555850,J.J. Gómez-Cadenas,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Physical Sciences|UNKNOWN|non_ascii|rare
-5004055822,Zofia Dzierżewicz,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5026327185,Alicja Wakulicz–Deja,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5101875535,M. Ortuño,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
-5041858281,Rezan Demir‐Cakan,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5007656938,Ji艡谋虂 Matas,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5001797888,Micha艂 Mackiewicz,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5084352657,Miguel Angel Medina鈥怭茅rez,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5042555850,J.J. G贸mez-Cadenas,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Physical Sciences|UNKNOWN|non_ascii|rare
+5004055822,Zofia Dzier偶ewicz,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5026327185,Alicja Wakulicz鈥揇eja,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5101875535,M. Ortu帽o,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
+5041858281,Rezan Demir鈥怌akan,Physical Sciences,UNKNOWN,unknown,non_ascii,rare,short,Physical Sciences|UNKNOWN|non_ascii|rare
 5015427304,Kohta Ohnishi,Health Sciences,GB,other,ascii_only,rare,short,Health Sciences|GB|ascii_only|rare
 5021415622,Greg Rubin,Health Sciences,GB,education,ascii_only,rare,medium,Health Sciences|GB|ascii_only|rare
 5062478414,Craig Robson,Health Sciences,GB,education,ascii_only,rare,medium,Health Sciences|GB|ascii_only|rare
@@ -1749,41 +1749,41 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5014390416,Richeng Cheng,Physical Sciences,CN,healthcare,ascii_only,rare,short,Physical Sciences|CN|ascii_only|rare
 5100317603,Jiao Zhang,Physical Sciences,CN,education,ascii_only,rare,short,Physical Sciences|CN|ascii_only|rare
 5100445470,Jun Guo,Physical Sciences,CN,education,ascii_only,rare,long,Physical Sciences|CN|ascii_only|rare
-5086042816,Marie Louise Tørring,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5082651860,Fanny Kählke,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5081823682,Nicole C. Krämer,Social Sciences,OTHER,education,non_ascii,rare,medium,Social Sciences|OTHER|non_ascii|rare
-5024738310,Benoît Rihoux,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5042178101,Maja Arslanagić-Kalajdžić,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5024753909,Homayoun Amini‎,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5058827187,Patrícia M. Pascoal,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5004928721,José Gascó,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5066855937,Ana Paula Drummond‐Lage,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5018527299,Katarína Valášková,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5064107377,Felipe E. García,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5008026991,Viktor Schønning,Social Sciences,OTHER,healthcare,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5036668703,Pilar León-Araúz,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
-5090045663,Valerié Schumacher,Health Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Health Sciences|UNKNOWN|non_ascii|rare
-5066700490,Yu‐Chi Chen,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
-5025378398,Esteban Gándara,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
-5060398236,Л. В. Донова,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
-5038962350,Chun‐Ming Huang,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
-5040992376,Miklós Góth,Health Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Health Sciences|UNKNOWN|non_ascii|rare
-5019911332,Sílvia Fontenete,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
-5017700485,Kenneth K. Kídd,Life Sciences,US,education,non_ascii,rare,long,Life Sciences|US|non_ascii|rare
-5031530236,André G. Uitterlinden,Life Sciences,US,education,non_ascii,rare,very_long,Life Sciences|US|non_ascii|rare
-5065005362,Jérémie Le Pen,Life Sciences,US,education,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
-5059366061,Andrés López‐Sepulcre,Life Sciences,US,education,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
-5034360567,Terry L. Orr‐Weaver,Life Sciences,US,facility,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
-5085472051,Patrick Kwok‐Shing Ng,Life Sciences,US,nonprofit,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
-5101834580,Jan Dvořák,Life Sciences,US,education,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
-5086258830,D. Marien Cortés,Life Sciences,US,facility,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
-5034562839,Alfonso Mondragón,Life Sciences,US,education,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
-5083987499,Béla Kis,Life Sciences,US,healthcare,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
-5017870615,Yi‐Wei Zhu,Physical Sciences,CN,education,non_ascii,rare,short,Physical Sciences|CN|non_ascii|rare
-5051032395,Jia‐Yue Yang,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
-5100373056,Yu‐Chen Liu,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
-5024694273,Ming‐Xue Wu,Physical Sciences,CN,education,non_ascii,rare,short,Physical Sciences|CN|non_ascii|rare
-5069596116,Hong‐Zhong Huang,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
+5086042816,Marie Louise T酶rring,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5082651860,Fanny K盲hlke,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5081823682,Nicole C. Kr盲mer,Social Sciences,OTHER,education,non_ascii,rare,medium,Social Sciences|OTHER|non_ascii|rare
+5024738310,Beno卯t Rihoux,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5042178101,Maja Arslanagi膰-Kalajd啪i膰,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5024753909,Homayoun Amini鈥?Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare,
+5058827187,Patr铆cia M. Pascoal,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5004928721,Jos茅 Gasc贸,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5066855937,Ana Paula Drummond鈥怢age,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5018527299,Katar铆na Val谩拧kov谩,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5064107377,Felipe E. Garc铆a,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5008026991,Viktor Sch酶nning,Social Sciences,OTHER,healthcare,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5036668703,Pilar Le贸n-Ara煤z,Social Sciences,OTHER,education,non_ascii,rare,short,Social Sciences|OTHER|non_ascii|rare
+5090045663,Valeri茅 Schumacher,Health Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Health Sciences|UNKNOWN|non_ascii|rare
+5066700490,Yu鈥怌hi Chen,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
+5025378398,Esteban G谩ndara,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
+5060398236,袥. 袙. 袛芯薪芯胁邪,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
+5038962350,Chun鈥怣ing Huang,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
+5040992376,Mikl贸s G贸th,Health Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Health Sciences|UNKNOWN|non_ascii|rare
+5019911332,S铆lvia Fontenete,Health Sciences,UNKNOWN,unknown,non_ascii,rare,short,Health Sciences|UNKNOWN|non_ascii|rare
+5017700485,Kenneth K. K铆dd,Life Sciences,US,education,non_ascii,rare,long,Life Sciences|US|non_ascii|rare
+5031530236,Andr茅 G. Uitterlinden,Life Sciences,US,education,non_ascii,rare,very_long,Life Sciences|US|non_ascii|rare
+5065005362,J茅r茅mie Le Pen,Life Sciences,US,education,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
+5059366061,Andr茅s L贸pez鈥怱epulcre,Life Sciences,US,education,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
+5034360567,Terry L. Orr鈥怶eaver,Life Sciences,US,facility,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
+5085472051,Patrick Kwok鈥怱hing Ng,Life Sciences,US,nonprofit,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
+5101834580,Jan Dvo艡谩k,Life Sciences,US,education,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
+5086258830,D. Marien Cort茅s,Life Sciences,US,facility,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
+5034562839,Alfonso Mondrag贸n,Life Sciences,US,education,non_ascii,rare,short,Life Sciences|US|non_ascii|rare
+5083987499,B茅la Kis,Life Sciences,US,healthcare,non_ascii,rare,medium,Life Sciences|US|non_ascii|rare
+5017870615,Yi鈥怶ei Zhu,Physical Sciences,CN,education,non_ascii,rare,short,Physical Sciences|CN|non_ascii|rare
+5051032395,Jia鈥怸ue Yang,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
+5100373056,Yu鈥怌hen Liu,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
+5024694273,Ming鈥怷ue Wu,Physical Sciences,CN,education,non_ascii,rare,short,Physical Sciences|CN|non_ascii|rare
+5069596116,Hong鈥怹hong Huang,Physical Sciences,CN,education,non_ascii,rare,medium,Physical Sciences|CN|non_ascii|rare
 5050571686,George R. Goethals,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
 5022118436,Sampada Karandikar,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
 5077569610,Kati Mozygemba,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
@@ -1806,7 +1806,7 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5073518981,Lynn E. Alden,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
 5014243738,Xiaolin Guo,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
 5082719806,Garth J. O. Fletcher,Social Sciences,UNKNOWN,unknown,ascii_only,rare,short,Social Sciences|UNKNOWN|ascii_only|rare
-5004196691,Yu‐Kyung Kim,Social Sciences,OTHER,education,non_ascii,medium,medium,Social Sciences|OTHER|non_ascii|medium
+5004196691,Yu鈥怟yung Kim,Social Sciences,OTHER,education,non_ascii,medium,medium,Social Sciences|OTHER|non_ascii|medium
 5042191229,Xinluo Zhao,Physical Sciences,CN,education,ascii_only,medium,short,Physical Sciences|CN|ascii_only|medium
 5029978692,Yunpeng Chen,Physical Sciences,CN,education,ascii_only,medium,long,Physical Sciences|CN|ascii_only|medium
 5013340793,Kele Xu,Physical Sciences,CN,education,ascii_only,medium,medium,Physical Sciences|CN|ascii_only|medium
@@ -1829,41 +1829,41 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5049002575,Virginia L. Calder,Health Sciences,OTHER,nonprofit,ascii_only,medium,medium,Health Sciences|OTHER|ascii_only|medium
 5072636929,Paul W. Dickman,Health Sciences,OTHER,education,ascii_only,medium,medium,Health Sciences|OTHER|ascii_only|medium
 5033983216,Filip Van den Bosch,Health Sciences,OTHER,healthcare,ascii_only,medium,long,Health Sciences|OTHER|ascii_only|medium
-5028794636,Z. Liliental‐Weber,Physical Sciences,US,facility,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
-5019777536,Kurt Barbé,Physical Sciences,US,company,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
-5040704545,Fatih Doğan,Physical Sciences,US,education,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
-5056358886,François Léonard,Physical Sciences,US,facility,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
-5069404099,Tomás Isakowitz,Physical Sciences,US,education,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
-5015542293,Adrià Gascón,Physical Sciences,US,company,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
-5019208005,Jean‐Paul Armache,Physical Sciences,US,education,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
+5028794636,Z. Liliental鈥怶eber,Physical Sciences,US,facility,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
+5019777536,Kurt Barb茅,Physical Sciences,US,company,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
+5040704545,Fatih Do臒an,Physical Sciences,US,education,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
+5056358886,Fran莽ois L茅onard,Physical Sciences,US,facility,non_ascii,rare,medium,Physical Sciences|US|non_ascii|rare
+5069404099,Tom谩s Isakowitz,Physical Sciences,US,education,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
+5015542293,Adri脿 Gasc贸n,Physical Sciences,US,company,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
+5019208005,Jean鈥怭aul Armache,Physical Sciences,US,education,non_ascii,rare,short,Physical Sciences|US|non_ascii|rare
 5066824693,Yankai Xia,Life Sciences,CN,education,ascii_only,medium,medium,Life Sciences|CN|ascii_only|medium
 5019472234,Qiaoxia Zhang,Life Sciences,CN,healthcare,ascii_only,medium,medium,Life Sciences|CN|ascii_only|medium
 5019434562,Xiaoying Luo,Life Sciences,CN,education,ascii_only,medium,medium,Life Sciences|CN|ascii_only|medium
 5073675400,Qingjun You,Life Sciences,CN,education,ascii_only,medium,short,Life Sciences|CN|ascii_only|medium
-5091799386,José M. Ruiz,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
-5008052293,D’Lane R. Compton,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
-5103101175,Pablo Ernesto Pérez,Social Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Social Sciences|UNKNOWN|non_ascii|rare
-5090734367,Hannakaisa Isomäki,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
-5039112406,Simon Baron‐Cohen,Social Sciences,GB,education,non_ascii,rare,long,Social Sciences|GB|non_ascii|rare
-5063285755,Alison O’Mara-Eves,Social Sciences,GB,facility,non_ascii,rare,short,Social Sciences|GB|non_ascii|rare
-5008225748,E. Müller,Physical Sciences,OTHER,education,non_ascii,medium,short,Physical Sciences|OTHER|non_ascii|medium
-5051440270,Élodie Faure,Physical Sciences,OTHER,other,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
-5043758131,Clément Sánchez,Physical Sciences,OTHER,other,non_ascii,medium,long,Physical Sciences|OTHER|non_ascii|medium
-5069785649,М. Кискинова,Physical Sciences,OTHER,facility,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
-5101720078,Natalia Martínez,Physical Sciences,OTHER,education,non_ascii,medium,short,Physical Sciences|OTHER|non_ascii|medium
-5044736169,Antonı́n Lyčka,Physical Sciences,OTHER,education,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
-5074520170,Shin‐Hee Kim,Health Sciences,US,healthcare,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5015717368,Liz Febo‐Rodriguez,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
-5076527629,Jean‐Paul Gonzalez,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5041003239,Tamar A. Smith‐Norowitz,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
-5044924272,Filip Konečný,Health Sciences,US,healthcare,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5077893976,Michael Væth,Health Sciences,US,nonprofit,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5023659191,Juan Gea‐Banacloche,Health Sciences,US,other,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5101566776,Ming‐Tseh Lin,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5075065022,José Córdoba‐Chacón,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
-5105773629,Virginie Ferré,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
-5022009036,Margit Juhász,Health Sciences,US,healthcare,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
-5080928341,Wael K. Al‐Delaimy,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5091799386,Jos茅 M. Ruiz,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
+5008052293,D鈥橪ane R. Compton,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
+5103101175,Pablo Ernesto P茅rez,Social Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Social Sciences|UNKNOWN|non_ascii|rare
+5090734367,Hannakaisa Isom盲ki,Social Sciences,UNKNOWN,unknown,non_ascii,rare,short,Social Sciences|UNKNOWN|non_ascii|rare
+5039112406,Simon Baron鈥怌ohen,Social Sciences,GB,education,non_ascii,rare,long,Social Sciences|GB|non_ascii|rare
+5063285755,Alison O鈥橫ara-Eves,Social Sciences,GB,facility,non_ascii,rare,short,Social Sciences|GB|non_ascii|rare
+5008225748,E. M眉ller,Physical Sciences,OTHER,education,non_ascii,medium,short,Physical Sciences|OTHER|non_ascii|medium
+5051440270,脡lodie Faure,Physical Sciences,OTHER,other,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
+5043758131,Cl茅ment S谩nchez,Physical Sciences,OTHER,other,non_ascii,medium,long,Physical Sciences|OTHER|non_ascii|medium
+5069785649,袦. 袣懈褋泻懈薪芯胁邪,Physical Sciences,OTHER,facility,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
+5101720078,Natalia Mart铆nez,Physical Sciences,OTHER,education,non_ascii,medium,short,Physical Sciences|OTHER|non_ascii|medium
+5044736169,Anton谋虂n Ly膷ka,Physical Sciences,OTHER,education,non_ascii,medium,medium,Physical Sciences|OTHER|non_ascii|medium
+5074520170,Shin鈥怘ee Kim,Health Sciences,US,healthcare,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5015717368,Liz Febo鈥怰odriguez,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
+5076527629,Jean鈥怭aul Gonzalez,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5041003239,Tamar A. Smith鈥怤orowitz,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
+5044924272,Filip Kone膷n媒,Health Sciences,US,healthcare,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5077893976,Michael V忙th,Health Sciences,US,nonprofit,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5023659191,Juan Gea鈥怋anacloche,Health Sciences,US,other,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5101566776,Ming鈥怲seh Lin,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5075065022,Jos茅 C贸rdoba鈥怌hac贸n,Health Sciences,US,education,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
+5105773629,Virginie Ferr茅,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
+5022009036,Margit Juh谩sz,Health Sciences,US,healthcare,non_ascii,rare,short,Health Sciences|US|non_ascii|rare
+5080928341,Wael K. Al鈥怐elaimy,Health Sciences,US,education,non_ascii,rare,medium,Health Sciences|US|non_ascii|rare
 5004608004,Hua Song,Social Sciences,CN,facility,ascii_only,rare,medium,Social Sciences|CN|ascii_only|rare
 5100458559,Yulin Zhao,Social Sciences,CN,education,ascii_only,rare,long,Social Sciences|CN|ascii_only|rare
 5101601340,Deyuan Li,Social Sciences,CN,education,ascii_only,rare,short,Social Sciences|CN|ascii_only|rare
@@ -1871,12 +1871,12 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5091281072,Patrick Y.K. Chau,Social Sciences,CN,education,ascii_only,rare,medium,Social Sciences|CN|ascii_only|rare
 5100323662,Wei Wei,Social Sciences,CN,education,ascii_only,rare,medium,Social Sciences|CN|ascii_only|rare
 5101758916,Kai Li,Social Sciences,CN,education,ascii_only,rare,medium,Social Sciences|CN|ascii_only|rare
-5090970652,Jin‐Young Kim,Physical Sciences,US,education,non_ascii,medium,long,Physical Sciences|US|non_ascii|medium
-5006200237,Sarah M. Hörst,Physical Sciences,US,facility,non_ascii,medium,short,Physical Sciences|US|non_ascii|medium
-5068257787,Hung‐Cheng Lai,Health Sciences,CN,education,non_ascii,rare,medium,Health Sciences|CN|non_ascii|rare
-5023533442,You‐Lin Qiao,Health Sciences,CN,education,non_ascii,rare,very_long,Health Sciences|CN|non_ascii|rare
-5015071376,Zhen‐Bin Ding,Health Sciences,CN,education,non_ascii,rare,medium,Health Sciences|CN|non_ascii|rare
-5076915459,Wen‐Harn Pan,Health Sciences,CN,education,non_ascii,rare,long,Health Sciences|CN|non_ascii|rare
+5090970652,Jin鈥怸oung Kim,Physical Sciences,US,education,non_ascii,medium,long,Physical Sciences|US|non_ascii|medium
+5006200237,Sarah M. H枚rst,Physical Sciences,US,facility,non_ascii,medium,short,Physical Sciences|US|non_ascii|medium
+5068257787,Hung鈥怌heng Lai,Health Sciences,CN,education,non_ascii,rare,medium,Health Sciences|CN|non_ascii|rare
+5023533442,You鈥怢in Qiao,Health Sciences,CN,education,non_ascii,rare,very_long,Health Sciences|CN|non_ascii|rare
+5015071376,Zhen鈥怋in Ding,Health Sciences,CN,education,non_ascii,rare,medium,Health Sciences|CN|non_ascii|rare
+5076915459,Wen鈥怘arn Pan,Health Sciences,CN,education,non_ascii,rare,long,Health Sciences|CN|non_ascii|rare
 5100351927,Lin Zhang,Life Sciences,US,facility,ascii_only,medium,long,Life Sciences|US|ascii_only|medium
 5068294245,Mario Rivera,Life Sciences,US,education,ascii_only,medium,medium,Life Sciences|US|ascii_only|medium
 5045358263,Lisa A. Taneyhill,Life Sciences,US,education,ascii_only,medium,short,Life Sciences|US|ascii_only|medium
@@ -1905,15 +1905,15 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5066119580,Tareq Y. Al-Naffouri,Physical Sciences,UNKNOWN,unknown,ascii_only,medium,medium,Physical Sciences|UNKNOWN|ascii_only|medium
 5102013134,Kevin Walker,Physical Sciences,UNKNOWN,unknown,ascii_only,medium,short,Physical Sciences|UNKNOWN|ascii_only|medium
 5056614766,Barry T. Pickup,Physical Sciences,UNKNOWN,unknown,ascii_only,medium,short,Physical Sciences|UNKNOWN|ascii_only|medium
-5103051300,Wei‐Chen Cheng,Life Sciences,CN,education,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
-5061425723,Dong‐Hua Yang,Life Sciences,CN,healthcare,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
-5028572589,Han‐Ming Shen,Life Sciences,CN,education,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
-5046796759,Xiu‐Qing Li,Life Sciences,CN,education,non_ascii,rare,long,Life Sciences|CN|non_ascii|rare
+5103051300,Wei鈥怌hen Cheng,Life Sciences,CN,education,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
+5061425723,Dong鈥怘ua Yang,Life Sciences,CN,healthcare,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
+5028572589,Han鈥怣ing Shen,Life Sciences,CN,education,non_ascii,rare,medium,Life Sciences|CN|non_ascii|rare
+5046796759,Xiu鈥怮ing Li,Life Sciences,CN,education,non_ascii,rare,long,Life Sciences|CN|non_ascii|rare
 5008560120,Tatsuya Nagano,Health Sciences,JP,education,ascii_only,medium,medium,Health Sciences|JP|ascii_only|medium
 5017624165,Kiyohide Fujimoto,Health Sciences,JP,healthcare,ascii_only,medium,medium,Health Sciences|JP|ascii_only|medium
 5080725230,Yoichi Arai,Health Sciences,JP,other,ascii_only,medium,long,Health Sciences|JP|ascii_only|medium
-5047468489,Shūichi Satō,Physical Sciences,JP,education,non_ascii,rare,medium,Physical Sciences|JP|non_ascii|rare
-5011593460,Kōichi Tanaka,Physical Sciences,JP,education,non_ascii,rare,long,Physical Sciences|JP|non_ascii|rare
+5047468489,Sh奴ichi Sat艒,Physical Sciences,JP,education,non_ascii,rare,medium,Physical Sciences|JP|non_ascii|rare
+5011593460,K艒ichi Tanaka,Physical Sciences,JP,education,non_ascii,rare,long,Physical Sciences|JP|non_ascii|rare
 5057087290,Hiroyuki Ohno,Physical Sciences,JP,healthcare,ascii_only,medium,long,Physical Sciences|JP|ascii_only|medium
 5016673925,Annie K. Powell,Physical Sciences,JP,education,ascii_only,medium,long,Physical Sciences|JP|ascii_only|medium
 5000141270,Masahiko Hada,Physical Sciences,JP,education,ascii_only,medium,short,Physical Sciences|JP|ascii_only|medium
@@ -1924,78 +1924,78 @@ author_id,display_name,dominant_domain,institution_country_bucket,institution_ty
 5062744090,Lili Jiang,Life Sciences,OTHER,company,ascii_only,medium,medium,Life Sciences|OTHER|ascii_only|medium
 5078086437,Michelle Debatisse,Life Sciences,OTHER,other,ascii_only,medium,medium,Life Sciences|OTHER|ascii_only|medium
 5056512930,Sheikh Riazuddin,Life Sciences,OTHER,education,ascii_only,medium,medium,Life Sciences|OTHER|ascii_only|medium
-5055540051,Chian‐Shiu Chien,Life Sciences,UNKNOWN,unknown,non_ascii,medium,short,Life Sciences|UNKNOWN|non_ascii|medium
+5055540051,Chian鈥怱hiu Chien,Life Sciences,UNKNOWN,unknown,non_ascii,medium,short,Life Sciences|UNKNOWN|non_ascii|medium
 5070914351,Matthew E. Taylor,Physical Sciences,GB,facility,ascii_only,medium,medium,Physical Sciences|GB|ascii_only|medium
 5059059088,Martin Brasier,Physical Sciences,GB,education,ascii_only,medium,short,Physical Sciences|GB|ascii_only|medium
 5072793626,Dale A. C. Brownson,Physical Sciences,GB,education,ascii_only,medium,short,Physical Sciences|GB|ascii_only|medium
-5065476550,Tae‐Aug Kim,Life Sciences,UNKNOWN,unknown,non_ascii,rare,short,Life Sciences|UNKNOWN|non_ascii|rare
-5102957866,Wolfgang König,Life Sciences,UNKNOWN,unknown,non_ascii,rare,long,Life Sciences|UNKNOWN|non_ascii|rare
-5034994959,Anne‐Catherine Prats,Life Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Life Sciences|UNKNOWN|non_ascii|rare
-5060601222,Roland Wedlich‐Söldner,Life Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Life Sciences|UNKNOWN|non_ascii|rare
-5087736818,László G. Kömüves,Life Sciences,UNKNOWN,unknown,non_ascii,rare,short,Life Sciences|UNKNOWN|non_ascii|rare
-5026184632,Nora I. Perrone‐Bizzozero,Life Sciences,US,education,non_ascii,medium,short,Life Sciences|US|non_ascii|medium
-5014083961,Kate Wolitzky‐Taylor,Social Sciences,US,education,non_ascii,rare,short,Social Sciences|US|non_ascii|rare
-5004620923,René M. Stulz,Social Sciences,US,nonprofit,non_ascii,rare,long,Social Sciences|US|non_ascii|rare
-5032533363,Miklós B. Halmos,Social Sciences,US,education,non_ascii,rare,short,Social Sciences|US|non_ascii|rare
-5061223764,Paul Crits‐Christoph,Social Sciences,US,education,non_ascii,rare,medium,Social Sciences|US|non_ascii|rare
+5065476550,Tae鈥怉ug Kim,Life Sciences,UNKNOWN,unknown,non_ascii,rare,short,Life Sciences|UNKNOWN|non_ascii|rare
+5102957866,Wolfgang K枚nig,Life Sciences,UNKNOWN,unknown,non_ascii,rare,long,Life Sciences|UNKNOWN|non_ascii|rare
+5034994959,Anne鈥怌atherine Prats,Life Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Life Sciences|UNKNOWN|non_ascii|rare
+5060601222,Roland Wedlich鈥怱枚ldner,Life Sciences,UNKNOWN,unknown,non_ascii,rare,medium,Life Sciences|UNKNOWN|non_ascii|rare
+5087736818,L谩szl贸 G. K枚m眉ves,Life Sciences,UNKNOWN,unknown,non_ascii,rare,short,Life Sciences|UNKNOWN|non_ascii|rare
+5026184632,Nora I. Perrone鈥怋izzozero,Life Sciences,US,education,non_ascii,medium,short,Life Sciences|US|non_ascii|medium
+5014083961,Kate Wolitzky鈥怲aylor,Social Sciences,US,education,non_ascii,rare,short,Social Sciences|US|non_ascii|rare
+5004620923,Ren茅 M. Stulz,Social Sciences,US,nonprofit,non_ascii,rare,long,Social Sciences|US|non_ascii|rare
+5032533363,Mikl贸s B. Halmos,Social Sciences,US,education,non_ascii,rare,short,Social Sciences|US|non_ascii|rare
+5061223764,Paul Crits鈥怌hristoph,Social Sciences,US,education,non_ascii,rare,medium,Social Sciences|US|non_ascii|rare
 5089355140,Peter V. Giannoudis,Health Sciences,GB,healthcare,ascii_only,medium,medium,Health Sciences|GB|ascii_only|medium
 5038339483,Simon Bott,Health Sciences,GB,healthcare,ascii_only,medium,medium,Health Sciences|GB|ascii_only|medium
 5102963210,Simon P. Robinson,Health Sciences,GB,education,ascii_only,medium,long,Health Sciences|GB|ascii_only|medium
-5090921680,Sadako Akashi‐Tanaka,Health Sciences,JP,education,non_ascii,rare,medium,Health Sciences|JP|non_ascii|rare
-5074587712,Csaba P. Kövesdy,Health Sciences,JP,education,non_ascii,rare,long,Health Sciences|JP|non_ascii|rare
-5053128729,Ingolf Steffan‐Dewenter,Life Sciences,OTHER,education,non_ascii,medium,short,Life Sciences|OTHER|non_ascii|medium
-5073755996,Thomas Müller,Life Sciences,OTHER,healthcare,non_ascii,medium,medium,Life Sciences|OTHER|non_ascii|medium
-5021365968,Harold A. Sackeïm,Health Sciences,US,education,non_ascii,medium,medium,Health Sciences|US|non_ascii|medium
-5107558817,Anthony M. D’Alessandro,Health Sciences,US,education,non_ascii,medium,medium,Health Sciences|US|non_ascii|medium
+5090921680,Sadako Akashi鈥怲anaka,Health Sciences,JP,education,non_ascii,rare,medium,Health Sciences|JP|non_ascii|rare
+5074587712,Csaba P. K枚vesdy,Health Sciences,JP,education,non_ascii,rare,long,Health Sciences|JP|non_ascii|rare
+5053128729,Ingolf Steffan鈥怐ewenter,Life Sciences,OTHER,education,non_ascii,medium,short,Life Sciences|OTHER|non_ascii|medium
+5073755996,Thomas M眉ller,Life Sciences,OTHER,healthcare,non_ascii,medium,medium,Life Sciences|OTHER|non_ascii|medium
+5021365968,Harold A. Sacke茂m,Health Sciences,US,education,non_ascii,medium,medium,Health Sciences|US|non_ascii|medium
+5107558817,Anthony M. D鈥橝lessandro,Health Sciences,US,education,non_ascii,medium,medium,Health Sciences|US|non_ascii|medium
 5048256571,Michael Carlberg,Social Sciences,OTHER,education,ascii_only,medium,medium,Social Sciences|OTHER|ascii_only|medium
 5039174519,Nicola Baumann,Social Sciences,OTHER,education,ascii_only,medium,short,Social Sciences|OTHER|ascii_only|medium
-5019581385,Colyn Crane‐Robinson,Life Sciences,GB,education,non_ascii,rare,short,Life Sciences|GB|non_ascii|rare
-5019987721,Mona Bajaj‐Elliott,Life Sciences,GB,healthcare,non_ascii,rare,medium,Life Sciences|GB|non_ascii|rare
-5005925013,Dénes Szűcs,Life Sciences,GB,education,non_ascii,rare,short,Life Sciences|GB|non_ascii|rare
-5011310486,Fernando Martín‐Moro,Health Sciences,OTHER,facility,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
-5081587983,Chun‐Ming Tsai,Health Sciences,OTHER,education,non_ascii,medium,medium,Health Sciences|OTHER|non_ascii|medium
-5023560047,António Jorge Ferreira,Health Sciences,OTHER,education,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
-5013126792,Cécilia Hindorf,Health Sciences,OTHER,healthcare,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
-5030700064,Magnus Törnblom,Health Sciences,OTHER,healthcare,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
+5019581385,Colyn Crane鈥怰obinson,Life Sciences,GB,education,non_ascii,rare,short,Life Sciences|GB|non_ascii|rare
+5019987721,Mona Bajaj鈥怑lliott,Life Sciences,GB,healthcare,non_ascii,rare,medium,Life Sciences|GB|non_ascii|rare
+5005925013,D茅nes Sz疟cs,Life Sciences,GB,education,non_ascii,rare,short,Life Sciences|GB|non_ascii|rare
+5011310486,Fernando Mart铆n鈥怣oro,Health Sciences,OTHER,facility,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
+5081587983,Chun鈥怣ing Tsai,Health Sciences,OTHER,education,non_ascii,medium,medium,Health Sciences|OTHER|non_ascii|medium
+5023560047,Ant贸nio Jorge Ferreira,Health Sciences,OTHER,education,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
+5013126792,C茅cilia Hindorf,Health Sciences,OTHER,healthcare,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
+5030700064,Magnus T枚rnblom,Health Sciences,OTHER,healthcare,non_ascii,medium,short,Health Sciences|OTHER|non_ascii|medium
 5028640466,Yasushi Ota,Social Sciences,JP,education,ascii_only,rare,short,Social Sciences|JP|ascii_only|rare
 5010418856,Yosuke Hashidate,Social Sciences,JP,education,ascii_only,rare,short,Social Sciences|JP|ascii_only|rare
-5057266942,Siu‐Long Yao,Health Sciences,CN,education,non_ascii,medium,medium,Health Sciences|CN|non_ascii|medium
-5020009504,Ana M. Sánchez,Physical Sciences,GB,education,non_ascii,rare,long,Physical Sciences|GB|non_ascii|rare
-5069126829,Steven J. Lainé,Physical Sciences,GB,education,non_ascii,rare,short,Physical Sciences|GB|non_ascii|rare
-5052118864,Feyzı Başar,Physical Sciences,GB,other,non_ascii,rare,short,Physical Sciences|GB|non_ascii|rare
+5057266942,Siu鈥怢ong Yao,Health Sciences,CN,education,non_ascii,medium,medium,Health Sciences|CN|non_ascii|medium
+5020009504,Ana M. S谩nchez,Physical Sciences,GB,education,non_ascii,rare,long,Physical Sciences|GB|non_ascii|rare
+5069126829,Steven J. Lain茅,Physical Sciences,GB,education,non_ascii,rare,short,Physical Sciences|GB|non_ascii|rare
+5052118864,Feyz谋 Ba艧ar,Physical Sciences,GB,other,non_ascii,rare,short,Physical Sciences|GB|non_ascii|rare
 5015255703,Takehiko Tosha,Life Sciences,JP,education,ascii_only,medium,medium,Life Sciences|JP|ascii_only|medium
 5113627059,Kazuki Nakao,Life Sciences,JP,company,ascii_only,medium,medium,Life Sciences|JP|ascii_only|medium
 5076795537,Tassos Anastassiades,Health Sciences,UNKNOWN,unknown,ascii_only,medium,short,Health Sciences|UNKNOWN|ascii_only|medium
 5066918667,Daniel B. Garside,Health Sciences,UNKNOWN,unknown,ascii_only,medium,medium,Health Sciences|UNKNOWN|ascii_only|medium
 5020239491,Peter Ekman,Health Sciences,UNKNOWN,unknown,ascii_only,medium,short,Health Sciences|UNKNOWN|ascii_only|medium
-5006305984,Yuan‐Gen Yao,Physical Sciences,CN,education,non_ascii,medium,medium,Physical Sciences|CN|non_ascii|medium
-5045457720,Rosa Menéndez,Physical Sciences,UNKNOWN,unknown,non_ascii,medium,short,Physical Sciences|UNKNOWN|non_ascii|medium
-5044985948,Gergely Endrődi,Physical Sciences,UNKNOWN,unknown,non_ascii,medium,medium,Physical Sciences|UNKNOWN|non_ascii|medium
+5006305984,Yuan鈥怗en Yao,Physical Sciences,CN,education,non_ascii,medium,medium,Physical Sciences|CN|non_ascii|medium
+5045457720,Rosa Men茅ndez,Physical Sciences,UNKNOWN,unknown,non_ascii,medium,short,Physical Sciences|UNKNOWN|non_ascii|medium
+5044985948,Gergely Endr艖di,Physical Sciences,UNKNOWN,unknown,non_ascii,medium,medium,Physical Sciences|UNKNOWN|non_ascii|medium
 5044599388,Monica Cusan,Life Sciences,UNKNOWN,unknown,ascii_only,medium,short,Life Sciences|UNKNOWN|ascii_only|medium
 5091447032,Chihiro Hosoda,Life Sciences,UNKNOWN,unknown,ascii_only,medium,short,Life Sciences|UNKNOWN|ascii_only|medium
 5053976612,Giorgia Santilli,Life Sciences,GB,healthcare,ascii_only,medium,medium,Life Sciences|GB|ascii_only|medium
 5090229750,Mario Abinun,Life Sciences,GB,healthcare,ascii_only,medium,medium,Life Sciences|GB|ascii_only|medium
-5069304759,Helen Baker‐Henningham,Health Sciences,GB,education,non_ascii,rare,short,Health Sciences|GB|non_ascii|rare
-5037762715,José Villar,Health Sciences,GB,education,non_ascii,rare,medium,Health Sciences|GB|non_ascii|rare
-5055082015,Peter Godfrey‐Faussett,Health Sciences,GB,education,non_ascii,rare,medium,Health Sciences|GB|non_ascii|rare
-5105978388,Shin‐ichiro Fujii,Life Sciences,JP,education,non_ascii,rare,medium,Life Sciences|JP|non_ascii|rare
-5037176798,Sachiko Akashi‐Takamura,Life Sciences,JP,education,non_ascii,rare,short,Life Sciences|JP|non_ascii|rare
-5001878364,Jong‐Hyeong Kim,Social Sciences,CN,education,non_ascii,rare,short,Social Sciences|CN|non_ascii|rare
-5041663976,Eiríkur Jónsson,Health Sciences,UNKNOWN,unknown,non_ascii,medium,short,Health Sciences|UNKNOWN|non_ascii|medium
-5103249475,Péter Bauer,Social Sciences,US,healthcare,non_ascii,medium,medium,Social Sciences|US|non_ascii|medium
+5069304759,Helen Baker鈥怘enningham,Health Sciences,GB,education,non_ascii,rare,short,Health Sciences|GB|non_ascii|rare
+5037762715,Jos茅 Villar,Health Sciences,GB,education,non_ascii,rare,medium,Health Sciences|GB|non_ascii|rare
+5055082015,Peter Godfrey鈥怓aussett,Health Sciences,GB,education,non_ascii,rare,medium,Health Sciences|GB|non_ascii|rare
+5105978388,Shin鈥恑chiro Fujii,Life Sciences,JP,education,non_ascii,rare,medium,Life Sciences|JP|non_ascii|rare
+5037176798,Sachiko Akashi鈥怲akamura,Life Sciences,JP,education,non_ascii,rare,short,Life Sciences|JP|non_ascii|rare
+5001878364,Jong鈥怘yeong Kim,Social Sciences,CN,education,non_ascii,rare,short,Social Sciences|CN|non_ascii|rare
+5041663976,Eir铆kur J贸nsson,Health Sciences,UNKNOWN,unknown,non_ascii,medium,short,Health Sciences|UNKNOWN|non_ascii|medium
+5103249475,P茅ter Bauer,Social Sciences,US,healthcare,non_ascii,medium,medium,Social Sciences|US|non_ascii|medium
 5007770903,Vinay Prasad,Social Sciences,US,other,ascii_only,medium,long,Social Sciences|US|ascii_only|medium
 5066329166,Kristen A. Lindquist,Social Sciences,US,education,ascii_only,medium,short,Social Sciences|US|ascii_only|medium
-5057858122,Neil Foster‐McGregor,Social Sciences,JP,facility,non_ascii,rare,short,Social Sciences|JP|non_ascii|rare
+5057858122,Neil Foster鈥怣cGregor,Social Sciences,JP,facility,non_ascii,rare,short,Social Sciences|JP|non_ascii|rare
 5003232903,Theresa HM Moore,Social Sciences,GB,healthcare,ascii_only,medium,medium,Social Sciences|GB|ascii_only|medium
 5049454572,Stacey Kaltman,Social Sciences,UNKNOWN,unknown,ascii_only,medium,short,Social Sciences|UNKNOWN|ascii_only|medium
-5055146293,Furio Corà,Physical Sciences,GB,education,non_ascii,medium,medium,Physical Sciences|GB|non_ascii|medium
+5055146293,Furio Cor脿,Physical Sciences,GB,education,non_ascii,medium,medium,Physical Sciences|GB|non_ascii|medium
 5088979194,Gang Xiong,Social Sciences,CN,education,ascii_only,medium,long,Social Sciences|CN|ascii_only|medium
-5016947629,Kei‐ichiro Nakamura,Life Sciences,JP,education,non_ascii,medium,short,Life Sciences|JP|non_ascii|medium
-5001390173,André Tylee,Health Sciences,GB,education,non_ascii,medium,medium,Health Sciences|GB|non_ascii|medium
-5103186517,Yasushi Yamämoto,Physical Sciences,JP,education,non_ascii,medium,long,Physical Sciences|JP|non_ascii|medium
-5051605162,Kin‐Mang Lau,Life Sciences,CN,education,non_ascii,medium,short,Life Sciences|CN|non_ascii|medium
-5019176918,David Keßler,Social Sciences,GB,nonprofit,non_ascii,medium,medium,Social Sciences|GB|non_ascii|medium
+5016947629,Kei鈥恑chiro Nakamura,Life Sciences,JP,education,non_ascii,medium,short,Life Sciences|JP|non_ascii|medium
+5001390173,Andr茅 Tylee,Health Sciences,GB,education,non_ascii,medium,medium,Health Sciences|GB|non_ascii|medium
+5103186517,Yasushi Yam盲moto,Physical Sciences,JP,education,non_ascii,medium,long,Physical Sciences|JP|non_ascii|medium
+5051605162,Kin鈥怣ang Lau,Life Sciences,CN,education,non_ascii,medium,short,Life Sciences|CN|non_ascii|medium
+5019176918,David Ke脽ler,Social Sciences,GB,nonprofit,non_ascii,medium,medium,Social Sciences|GB|non_ascii|medium
 5065376211,Masataka Higuchi,Social Sciences,JP,education,ascii_only,medium,short,Social Sciences|JP|ascii_only|medium
-5058084937,Skirmantas Kriaučionis,Life Sciences,GB,education,non_ascii,medium,short,Life Sciences|GB|non_ascii|medium
-5052066871,Patricia Martínez,Social Sciences,UNKNOWN,unknown,non_ascii,medium,short,Social Sciences|UNKNOWN|non_ascii|medium
-5076273759,Chikara Οhyama,Health Sciences,JP,education,non_ascii,medium,medium,Health Sciences|JP|non_ascii|medium
+5058084937,Skirmantas Kriau膷ionis,Life Sciences,GB,education,non_ascii,medium,short,Life Sciences|GB|non_ascii|medium
+5052066871,Patricia Mart铆nez,Social Sciences,UNKNOWN,unknown,non_ascii,medium,short,Social Sciences|UNKNOWN|non_ascii|medium
+5076273759,Chikara 螣hyama,Health Sciences,JP,education,non_ascii,medium,medium,Health Sciences|JP|non_ascii|medium
