@@ -31,7 +31,11 @@ class LlmMatcher:
         best_idx = -1
         best_score = 0
         for idx, c in enumerate(candidates):
-            text = f"{c.title} {c.snippet} {c.source_url} {c.image_url}".lower()
+            text = (
+                f"{c.title} {c.snippet} {c.source_url} {c.image_url} "
+                f"{c.page_title or ''} {c.page_h1 or ''} {c.page_meta_description or ''} "
+                f"{c.image_alt or ''} {c.nearby_text or ''}"
+            ).lower()
             score = 0
             if name and name in text:
                 score += 2
@@ -62,20 +66,31 @@ class LlmMatcher:
         options = [
             {
                 "index": i,
-                "title": c.title,
-                "snippet": c.snippet,
+                "source_domain": c.source_domain,
                 "source_url": c.source_url,
                 "image_url": c.image_url,
+                "page_title": c.page_title or c.title,
+                "page_h1": c.page_h1,
+                "page_meta_description": c.page_meta_description,
+                "image_alt": c.image_alt,
+                "nearby_text": c.nearby_text,
+                "snippet": c.snippet,
+                "pre_rank_score": c.pre_rank_score,
+                "name_match_score": c.name_match_score,
+                "institution_match_score": c.institution_match_score,
+                "source_trust_score": c.source_trust_score,
             }
             for i, c in enumerate(candidates)
         ]
         prompt = (
-            "You are selecting a scholar profile image candidate.\n"
-            "Given the author context and web candidates, return strict JSON only:\n"
+            "You are selecting a scholar profile image candidate based on page context evidence.\n"
+            "Given the author context and structured candidate evidence, return strict JSON only:\n"
             '{"selected_index": <int or -1>, "confidence": <0..1>, "reason": "<short>"}\n'
             "Choose -1 if uncertain or likely wrong person.\n"
+            "Judge whether the page context indicates this image is used as the author's profile photo.\n"
+            "Prioritize name match, institution match, and official profile/faculty page signals.\n"
             f"author={json.dumps(author_ctx, ensure_ascii=False)}\n"
-            f"candidates={json.dumps(options, ensure_ascii=False)}"
+            f"candidate_evidence={json.dumps(options, ensure_ascii=False)}"
         )
 
         payload = {

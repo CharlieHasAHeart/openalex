@@ -16,6 +16,16 @@ class SearchCandidate:
     title: str
     snippet: str
     mime: str
+    page_h1: str | None = None
+    page_meta_description: str | None = None
+    image_alt: str | None = None
+    nearby_text: str | None = None
+    name_match_score: float | None = None
+    institution_match_score: float | None = None
+    source_trust_score: float | None = None
+    pre_rank_score: float | None = None
+    source_domain: str | None = None
+    page_title: str | None = None
 
 
 def _guess_mime_from_url(url: str) -> str:
@@ -78,7 +88,16 @@ class WebSearchClient:
                 continue
             image_url = urljoin(source_url, unescape(match.group(1)).strip())
             mime = _guess_mime_from_url(image_url)
-            candidates.append(SearchCandidate(image_url=image_url, source_url=source_url, title="", snippet="", mime=mime))
+            candidates.append(
+                SearchCandidate(
+                    image_url=image_url,
+                    source_url=source_url,
+                    title="",
+                    snippet="",
+                    mime=mime,
+                    source_domain=urlparse(source_url).hostname,
+                )
+            )
 
         img_pattern = re.compile(r'<img[^>]+src="([^"]+)"', re.IGNORECASE)
         for match in img_pattern.finditer(page_html):
@@ -88,9 +107,103 @@ class WebSearchClient:
             mime = _guess_mime_from_url(image_url)
             if mime not in {"image/jpeg", "image/png", "image/webp"}:
                 continue
-            candidates.append(SearchCandidate(image_url=image_url, source_url=source_url, title="", snippet="", mime=mime))
+            candidates.append(
+                SearchCandidate(
+                    image_url=image_url,
+                    source_url=source_url,
+                    title="",
+                    snippet="",
+                    mime=mime,
+                    source_domain=urlparse(source_url).hostname,
+                )
+            )
             if len(candidates) >= 5:
                 break
+        return candidates
+
+    def _clean_text(self, value: str | None) -> str | None:
+        if not value:
+            return None
+        text = re.sub(r"<[^>]+>", " ", value)
+        text = " ".join(unescape(text).split())
+        return text or None
+
+    def _extract_page_context(self, html: str, image_url: str) -> dict[str, str | None]:
+        page_title = None
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        if title_match:
+            page_title = self._clean_text(title_match.group(1))
+
+        page_h1 = None
+        h1_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.IGNORECASE | re.DOTALL)
+        if h1_match:
+            page_h1 = self._clean_text(h1_match.group(1))
+
+        meta_description = None
+        meta_match = re.search(
+            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']',
+            html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if meta_match:
+            meta_description = self._clean_text(meta_match.group(1))
+
+        image_alt = None
+        nearby_text = None
+        img_iter = re.finditer(r"<img[^>]+>", html, re.IGNORECASE | re.DOTALL)
+        image_url_lower = image_url.lower()
+        chosen_match = None
+        for img_match in img_iter:
+            tag = img_match.group(0)
+            src_match = re.search(r'src=["\']([^"\']+)["\']', tag, re.IGNORECASE)
+            if not src_match:
+                continue
+            src = unescape(src_match.group(1)).strip().lower()
+            if src and (src in image_url_lower or image_url_lower in src):
+                chosen_match = img_match
+                alt_match = re.search(r'alt=["\']([^"\']*)["\']', tag, re.IGNORECASE)
+                if alt_match:
+                    image_alt = self._clean_text(alt_match.group(1))
+                break
+
+        if chosen_match:
+            start = max(chosen_match.start() - 250, 0)
+            end = min(chosen_match.end() + 250, len(html))
+            nearby_text = self._clean_text(html[start:end])
+
+        if image_alt is None:
+            first_alt = re.search(r'<img[^>]+alt=["\']([^"\']*)["\']', html, re.IGNORECASE | re.DOTALL)
+            if first_alt:
+                image_alt = self._clean_text(first_alt.group(1))
+
+        if nearby_text is None:
+            p_match = re.search(r"<p[^>]*>(.*?)</p>", html, re.IGNORECASE | re.DOTALL)
+            if p_match:
+                nearby_text = self._clean_text(p_match.group(1))
+
+        return {
+            "page_title": page_title,
+            "page_h1": page_h1,
+            "page_meta_description": meta_description,
+            "image_alt": image_alt,
+            "nearby_text": nearby_text,
+        }
+
+    def enrich_candidates_context(self, candidates: list[SearchCandidate], limit: int = 5) -> list[SearchCandidate]:
+        if not candidates:
+            return candidates
+        max_items = max(0, limit)
+        for candidate in candidates[:max_items]:
+            try:
+                page = self._http.request("GET", candidate.source_url)
+                context = self._extract_page_context(page.text, candidate.image_url)
+                candidate.page_title = context.get("page_title") or candidate.title
+                candidate.page_h1 = context.get("page_h1")
+                candidate.page_meta_description = context.get("page_meta_description")
+                candidate.image_alt = context.get("image_alt")
+                candidate.nearby_text = context.get("nearby_text")
+            except Exception:
+                candidate.page_title = candidate.page_title or candidate.title
         return candidates
 
     def search_image_candidates(self, author: AuthorRecord) -> list[SearchCandidate]:
@@ -108,6 +221,7 @@ class WebSearchClient:
             for item in self._extract_image_candidates(source_url, page.text):
                 item.title = title
                 item.snippet = snippet
+                item.page_title = title
                 results.append(item)
                 if len(results) >= self._max_results:
                     return results
