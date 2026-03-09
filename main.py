@@ -30,6 +30,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-recommendation", default="", help="Optional filter for review recommendation (auto_accept/needs_review/ambiguous).")
     parser.add_argument("--sample-review", action="store_true", help="Also output stratified review samples by recommendation.")
     parser.add_argument("--sample-per-group", type=int, default=20, help="Sample size per recommendation group.")
+    parser.add_argument("--benchmark-authors-file", default="", help="Path to benchmark authors JSON/JSONL file.")
+    parser.add_argument("--annotations-file", default="", help="Path to annotations JSON/JSONL file.")
+    parser.add_argument("--export-benchmark-report", action="store_true", help="Export benchmark report with annotations join, then exit.")
+    parser.add_argument("--benchmark-result-limit", type=int, default=1000, help="How many recent decision summaries to load for benchmark report.")
     return parser.parse_args()
 
 
@@ -209,6 +213,12 @@ def main() -> int:
     logger = logging.getLogger(__name__)
 
     from avatar_pipeline.config import PipelineConfig, load_dotenv
+    from avatar_pipeline.benchmark import (
+        build_benchmark_report,
+        build_benchmark_rows,
+        load_annotations,
+        load_benchmark_authors,
+    )
     from avatar_pipeline.evaluation import format_review_export, sample_decisions, summarize_decisions
     from avatar_pipeline.http import RateLimiter
     from avatar_pipeline.pg_repository import PgRepository
@@ -253,6 +263,50 @@ def main() -> int:
         if args.sample_review:
             sampled = sample_decisions(formatted, per_group=max(1, args.sample_per_group))
             print(json.dumps({"sampled": sampled}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.export_benchmark_report:
+        benchmark_authors = []
+        annotations: dict[str, dict] = {}
+        try:
+            if args.benchmark_authors_file.strip():
+                benchmark_authors = load_benchmark_authors(args.benchmark_authors_file.strip())
+            if args.annotations_file.strip():
+                annotations = load_annotations(args.annotations_file.strip())
+        except Exception as exc:
+            logger.exception("benchmark_input_load_failed error=%s", exc)
+            return 2
+
+        author_ids = [str(item.get("author_id")) for item in benchmark_authors if item.get("author_id") is not None]
+        with PgRepository(
+            host=config.pghost,
+            port=config.pgport,
+            database=config.pgdatabase,
+            user=config.pguser,
+            password=config.pgpassword,
+            sslmode=config.pgsslmode,
+        ) as repository:
+            rows = repository.list_recent_decision_summaries(
+                limit=max(1, args.benchmark_result_limit),
+                author_ids=author_ids or None,
+            )
+        formatted = format_review_export(rows)
+        joined = build_benchmark_rows(
+            result_rows=formatted,
+            annotations=annotations,
+            benchmark_authors=benchmark_authors or None,
+        )
+        report = build_benchmark_report(
+            joined_rows=joined,
+            benchmark_meta={
+                "authors_file": args.benchmark_authors_file.strip() or None,
+                "annotations_file": args.annotations_file.strip() or None,
+                "benchmark_author_count": len(benchmark_authors),
+                "joined_rows": len(joined),
+                "result_limit": max(1, args.benchmark_result_limit),
+            },
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
 
     try:

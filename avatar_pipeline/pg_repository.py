@@ -640,6 +640,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         self,
         limit: int = 50,
         recommendation: str | None = None,
+        author_ids: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 1000))
         sql = """
@@ -665,9 +666,17 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         ) d ON true
         """
         params: list[Any] = []
+        conditions: list[str] = []
         if recommendation and recommendation.strip():
-            sql += " WHERE d.evidence ->> 'review_recommendation' = %s"
+            conditions.append("d.evidence ->> 'review_recommendation' = %s")
             params.append(recommendation.strip())
+        if author_ids:
+            normalized_ids = [str(item).strip() for item in author_ids if str(item).strip()]
+            if normalized_ids:
+                conditions.append("ar.author_id::text = ANY(%s)")
+                params.append(normalized_ids)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
         sql += """
         ORDER BY COALESCE(ar.finished_at, ar.created_at) DESC, ar.id DESC
         LIMIT %s
