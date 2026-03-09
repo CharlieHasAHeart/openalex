@@ -127,7 +127,14 @@ def _create_runner(config, limiter, run_id: str | None = None):
         retry_jitter_ratio=config.retry_jitter_ratio,
         retry_429_min_delay_seconds=config.retry_429_min_delay_seconds,
     )
-    web_search_client = WebSearchClient(http, max_results=config.websearch_max_results)
+    web_search_client = WebSearchClient(
+        http,
+        max_results=config.websearch_max_results,
+        person_page_query_max=config.person_page_query_max,
+        person_page_per_query_results=config.person_page_per_query_results,
+        person_page_max_fetch=config.person_page_max_fetch,
+        profile_image_score_threshold=config.profile_image_score_threshold,
+    )
     llm_matcher = LlmMatcher(
         api_key=config.llm_api_key,
         base_url=config.llm_base_url,

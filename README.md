@@ -15,7 +15,7 @@ It currently supports:
 
 Core runtime flow:
 1. Load author rows from `authors_analysis`.
-2. Search and extract image candidates from web pages.
+2. Discover person/profile pages via DuckDuckGo HTML (no SerpAPI), then extract image candidates from page structure.
 3. Enrich candidates (page context, image metadata), cluster/dedupe, pre-rank.
 4. Use `LlmMatcher` to choose candidate.
 5. Apply final decision gating and review metadata.
@@ -72,6 +72,10 @@ Important defaults in `config.py`:
 - default proxy fallback: `http://127.0.0.1:7890` if no proxy env exists
 - allowed mime: `image/jpeg,image/png,image/webp`
 - web search max: `WEBSEARCH_MAX_RESULTS` (default `8`)
+- person-page discovery queries per author: `PERSON_PAGE_QUERY_MAX` (default `7`)
+- per-query search result cap: `PERSON_PAGE_PER_QUERY_RESULTS` (default `5`)
+- max profile pages fetched per author: `PERSON_PAGE_MAX_FETCH` (default `12`)
+- structured image precheck threshold: `PROFILE_IMAGE_SCORE_THRESHOLD` (default `0.35`)
 
 ## 5. CLI Usage
 
@@ -179,6 +183,9 @@ Pre-annotation fields:
 - Skip logic uses latest run state from `openalex.avatar_pipeline_author_runs`, not production table.
 - If benchmark package authors have no matching pipeline run evidence, pre-annotation will fall back to uncertain and mark low evidence.
 - `avatar_gate.validate_image_candidate()` currently only validates mime type against allowed set.
+- Web search path does not depend on SerpAPI. It uses DuckDuckGo HTML, then a person-page-first extraction strategy.
+- Structured image extraction priority is: `JSON-LD Person.image` -> `og:image` -> profile/people/faculty blocks -> generic `<img>` fallback.
+- Search/extraction emits staged logs for query counts, profile-page recall, per-page extraction buckets, and zero-candidate reasons (`no_search_results`, `no_profile_pages`, `no_structured_images`, `all_images_filtered`, `page_fetch_failed`, `parse_failed`).
 
 ## 8. Typical End-to-End Benchmark Workflow
 

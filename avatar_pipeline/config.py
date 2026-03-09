@@ -105,6 +105,10 @@ class PipelineConfig:
     llm_model: str
     llm_timeout_seconds: int
     websearch_max_results: int
+    person_page_query_max: int
+    person_page_per_query_results: int
+    person_page_max_fetch: int
+    profile_image_score_threshold: float
     refresh_ok_days: int
     refresh_no_image_days: int
     refresh_error_days: int
@@ -157,6 +161,10 @@ class PipelineConfig:
             llm_model=_get_env("LLM_MODEL", "gpt-4o-mini"),
             llm_timeout_seconds=int(_get_env("LLM_TIMEOUT_SECONDS", "30")),
             websearch_max_results=int(_get_env("WEBSEARCH_MAX_RESULTS", "8")),
+            person_page_query_max=int(_get_env("PERSON_PAGE_QUERY_MAX", "7")),
+            person_page_per_query_results=int(_get_env("PERSON_PAGE_PER_QUERY_RESULTS", "5")),
+            person_page_max_fetch=int(_get_env("PERSON_PAGE_MAX_FETCH", "12")),
+            profile_image_score_threshold=float(_get_env("PROFILE_IMAGE_SCORE_THRESHOLD", "0.35")),
             refresh_ok_days=int(_get_env("REFRESH_OK_DAYS", "90")),
             refresh_no_image_days=int(_get_env("REFRESH_NO_IMAGE_DAYS", "30")),
             refresh_error_days=int(_get_env("REFRESH_ERROR_DAYS", "1")),
