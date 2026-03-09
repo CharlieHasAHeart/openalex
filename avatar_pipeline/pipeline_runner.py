@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from avatar_pipeline.avatar_gate import validate_image_candidate
 from avatar_pipeline.config import PipelineConfig
@@ -85,6 +86,9 @@ class PipelineRunner:
                     status=result.status,
                     error_code=None,
                     error_message=result.error_message,
+                    selected_candidate_id=result.selected_candidate_id,
+                    llm_score=result.llm_confidence,
+                    final_score=result.llm_confidence,
                     finished_at=datetime.now(timezone.utc),
                 )
             except Exception as exc:
@@ -114,13 +118,15 @@ class PipelineRunner:
 
         self._stats[result.status] += 1
         logger.info(
-            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s error_message=%s persist_error=%s run_persist_error=%s",
+            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s selected_candidate_id=%s llm_confidence=%s error_message=%s persist_error=%s run_persist_error=%s",
             self._run_id,
             author.author_id,
             author.orcid,
             result.status,
             result.wikidata_qid,
             result.commons_file,
+            result.selected_candidate_id,
+            result.llm_confidence,
             result.error_message,
             persist_error,
             run_persist_error,
@@ -164,11 +170,67 @@ class PipelineRunner:
         if not candidates:
             return PipelineResult(author_id=author.author_id, status="no_image", error_message="websearch_no_candidates")
 
+        candidate_id_by_index: dict[int, int] = {}
+        if self._run_id:
+            for idx, raw_candidate in enumerate(candidates):
+                source_domain: str | None = None
+                try:
+                    source_domain = urlparse(raw_candidate.source_url).hostname
+                except Exception:
+                    source_domain = None
+                try:
+                    candidate_id = self._repo.insert_candidate_image(
+                        run_id=self._run_id,
+                        author_id=int(author.author_id),
+                        source_page_url=raw_candidate.source_url,
+                        source_image_url=raw_candidate.image_url,
+                        source_domain=source_domain,
+                        page_title=raw_candidate.title,
+                        snippet=raw_candidate.snippet,
+                    )
+                    candidate_id_by_index[idx] = candidate_id
+                except Exception as exc:
+                    logger.error(
+                        "pipeline_candidate_persist_failed run_id=%s author_id=%s candidate_index=%s source_url=%s error_message=%s",
+                        self._run_id,
+                        author.author_id,
+                        idx,
+                        raw_candidate.source_url,
+                        str(exc),
+                    )
+
         decision = self._matcher.choose_best(author, candidates)
         if not decision:
             return PipelineResult(author_id=author.author_id, status="ambiguous", error_message="llm_no_confident_match")
+        if decision.selected_index < 0 or decision.selected_index >= len(candidates):
+            return PipelineResult(author_id=author.author_id, status="ambiguous", error_message="llm_invalid_selected_index")
 
         chosen = candidates[decision.selected_index]
+        selected_candidate_id = candidate_id_by_index.get(decision.selected_index)
+        if self._run_id and selected_candidate_id is not None:
+            try:
+                self._repo.insert_candidate_decision(
+                    candidate_id=selected_candidate_id,
+                    run_id=self._run_id,
+                    author_id=int(author.author_id),
+                    decision="match",
+                    llm_score=decision.confidence,
+                    final_score=decision.confidence,
+                    decision_reason=decision.reason,
+                    evidence={
+                        "selected_index": decision.selected_index,
+                        "source_url": chosen.source_url,
+                        "image_url": chosen.image_url,
+                    },
+                )
+            except Exception as exc:
+                logger.error(
+                    "pipeline_decision_persist_failed run_id=%s author_id=%s candidate_id=%s error_message=%s",
+                    self._run_id,
+                    author.author_id,
+                    selected_candidate_id,
+                    str(exc),
+                )
         image_bytes, actual_mime = self._web_search.download_image(chosen.image_url)
         candidate = ImageCandidate(
             commons_file=chosen.source_url,
@@ -190,6 +252,9 @@ class PipelineRunner:
                 status="invalid_image",
                 commons_file=chosen.source_url,
                 error_message=image_error,
+                selected_candidate_id=selected_candidate_id,
+                llm_confidence=decision.confidence,
+                decision_reason=decision.reason,
             )
 
         sha256 = sha256_hex(image_bytes)
@@ -202,6 +267,9 @@ class PipelineRunner:
                 content_sha256=sha256,
                 oss_object_key=existing["oss_object_key"],
                 oss_url=existing.get("oss_url"),
+                selected_candidate_id=selected_candidate_id,
+                llm_confidence=decision.confidence,
+                decision_reason=decision.reason,
             )
 
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, candidate.mime)
@@ -213,4 +281,7 @@ class PipelineRunner:
             content_sha256=sha256,
             oss_object_key=object_key,
             oss_url=oss_url,
+            selected_candidate_id=selected_candidate_id,
+            llm_confidence=decision.confidence,
+            decision_reason=decision.reason,
         )

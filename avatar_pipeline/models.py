@@ -68,6 +68,9 @@ class PipelineResult:
     content_sha256: str | None = None
     oss_object_key: str | None = None
     oss_url: str | None = None
+    selected_candidate_id: int | None = None
+    llm_confidence: float | None = None
+    decision_reason: str | None = None
 
 
 @dataclass(slots=True)
