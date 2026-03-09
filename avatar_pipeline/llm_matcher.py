@@ -66,6 +66,9 @@ class LlmMatcher:
         options = [
             {
                 "index": i,
+                "source_type": c.source_type,
+                "discovery_score": c.discovery_score,
+                "discovery_evidence": c.discovery_evidence,
                 "source_domain": c.source_domain,
                 "source_url": c.source_url,
                 "image_url": c.image_url,
@@ -96,6 +99,8 @@ class LlmMatcher:
             "Choose -1 if uncertain or likely wrong person.\n"
             "Judge whether the page context indicates this image is used as the author's profile photo.\n"
             "Prioritize name match, institution match, and official profile/faculty page signals.\n"
+            "Prefer candidates discovered from official orcid-linked pages, faculty/staff profile pages, "
+            "or institutional people pages over generic search results.\n"
             f"author={json.dumps(author_ctx, ensure_ascii=False)}\n"
             f"candidate_evidence={json.dumps(options, ensure_ascii=False)}"
         )

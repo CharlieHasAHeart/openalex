@@ -34,6 +34,20 @@ class SearchCandidate:
     is_valid_image: bool | None = None
     invalid_reason: str | None = None
     image_precheck_score: float | None = None
+    source_type: str | None = None
+    discovery_score: float | None = None
+    discovery_evidence: str | None = None
+
+
+@dataclass(slots=True)
+class ProfilePageCandidate:
+    page_url: str
+    source_domain: str | None
+    source_type: str
+    discovery_score: float | None = None
+    discovery_evidence: str | None = None
+    title: str | None = None
+    snippet: str | None = None
 
 
 def _guess_mime_from_url(url: str) -> str:
@@ -68,6 +82,139 @@ class WebSearchClient:
         if author.institution_name:
             parts.append(author.institution_name.strip())
         return " ".join([p for p in parts if p])
+
+    def _search_pages(self, query: str, max_results: int | None = None) -> list[tuple[str, str, str]]:
+        limit = max_results if max_results is not None else self._max_results
+        q = quote_plus(query)
+        search_url = f"https://duckduckgo.com/html/?q={q}"
+        resp = self._http.request("GET", search_url)
+        return self._parse_search_results(resp.text)[: max(1, limit)]
+
+    def _classify_source_type(self, url: str) -> str:
+        lower = url.lower()
+        if "orcid.org" in lower:
+            return "orcid_profile"
+        if any(token in lower for token in ("/faculty/", "/profile/", "/staff/", "/person/")):
+            return "institution_profile"
+        if any(token in lower for token in ("/people/", "/directory/")):
+            return "institution_directory"
+        if any(token in lower for token in ("/lab/", "/group/", "/team/")):
+            return "lab_people_page"
+        return "generic_search_result"
+
+    def _score_profile_page(self, page: ProfilePageCandidate) -> float:
+        score = float(page.discovery_score or 0.0)
+        domain = (page.source_domain or "").lower()
+        path = urlparse(page.page_url).path.lower()
+        if domain.endswith(".edu") or ".edu." in domain:
+            score += 1.2
+        if "orcid.org" in domain:
+            score += 1.6
+        if any(token in path for token in ("/faculty/", "/profile/", "/staff/", "/person/")):
+            score += 1.2
+        if any(token in path for token in ("/people/", "/directory/")):
+            score += 0.8
+        if any(token in path for token in ("/lab/", "/group/", "/team/")):
+            score += 0.5
+        if page.source_type == "generic_search_result":
+            score -= 0.2
+        return score
+
+    def _dedupe_profile_pages(self, pages: list[ProfilePageCandidate]) -> list[ProfilePageCandidate]:
+        deduped: dict[str, ProfilePageCandidate] = {}
+        for item in pages:
+            parsed = urlparse(item.page_url)
+            key = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+            existing = deduped.get(key)
+            if existing is None:
+                deduped[key] = item
+                continue
+            if (item.discovery_score or 0.0) > (existing.discovery_score or 0.0):
+                deduped[key] = item
+        result = list(deduped.values())
+        result.sort(key=self._score_profile_page, reverse=True)
+        return result
+
+    def discover_profile_pages(self, author: AuthorRecord) -> list[ProfilePageCandidate]:
+        pages: list[ProfilePageCandidate] = []
+
+        if author.orcid:
+            orcid_url = f"https://orcid.org/{author.orcid}"
+            pages.append(
+                ProfilePageCandidate(
+                    page_url=orcid_url,
+                    source_domain="orcid.org",
+                    source_type="orcid_profile",
+                    discovery_score=3.0,
+                    discovery_evidence="orcid profile url",
+                )
+            )
+            try:
+                orcid_resp = self._http.request("GET", orcid_url)
+                for href in re.findall(r'href=["\']([^"\']+)["\']', orcid_resp.text, re.IGNORECASE):
+                    link = unescape(href).strip()
+                    if not link.startswith("http"):
+                        continue
+                    if "orcid.org" in link:
+                        continue
+                    pages.append(
+                        ProfilePageCandidate(
+                            page_url=link,
+                            source_domain=urlparse(link).hostname,
+                            source_type="orcid_external_link",
+                            discovery_score=5.0,
+                            discovery_evidence="found via orcid external link",
+                        )
+                    )
+            except Exception:
+                pass
+
+        if author.institution_name:
+            institution_queries = [
+                f'"{author.display_name}" "{author.institution_name}" faculty',
+                f'"{author.display_name}" "{author.institution_name}" profile',
+                f'"{author.display_name}" "{author.institution_name}" people',
+            ]
+            for query in institution_queries:
+                try:
+                    for url, title, snippet in self._search_pages(query, max_results=5):
+                        source_type = self._classify_source_type(url)
+                        if source_type == "generic_search_result":
+                            continue
+                        pages.append(
+                            ProfilePageCandidate(
+                                page_url=url,
+                                source_domain=urlparse(url).hostname,
+                                source_type=source_type,
+                                discovery_score=3.2 if source_type == "institution_profile" else 2.6,
+                                discovery_evidence=f"institution-oriented query: {query}",
+                                title=title,
+                                snippet=snippet,
+                            )
+                        )
+                except Exception:
+                    continue
+
+        # Generic fallback path must always remain available.
+        generic_query = self._build_query(author)
+        try:
+            for url, title, snippet in self._search_pages(generic_query, max_results=self._max_results):
+                pages.append(
+                    ProfilePageCandidate(
+                        page_url=url,
+                        source_domain=urlparse(url).hostname,
+                        source_type="generic_search_result",
+                        discovery_score=1.0,
+                        discovery_evidence="generic fallback search",
+                        title=title,
+                        snippet=snippet,
+                    )
+                )
+        except Exception:
+            pass
+
+        deduped = self._dedupe_profile_pages(pages)
+        return deduped[: max(self._max_results, 5)]
 
     def _parse_search_results(self, html: str) -> list[tuple[str, str, str]]:
         pattern = re.compile(
@@ -315,21 +462,20 @@ class WebSearchClient:
         return candidates
 
     def search_image_candidates(self, author: AuthorRecord) -> list[SearchCandidate]:
-        query = quote_plus(self._build_query(author))
-        search_url = f"https://duckduckgo.com/html/?q={query}"
-        resp = self._http.request("GET", search_url)
-        search_hits = self._parse_search_results(resp.text)
-
+        profile_pages = self.discover_profile_pages(author)
         results: list[SearchCandidate] = []
-        for source_url, title, snippet in search_hits:
+        for page in profile_pages:
             try:
-                page = self._http.request("GET", source_url)
+                page_resp = self._http.request("GET", page.page_url)
             except Exception:
                 continue
-            for item in self._extract_image_candidates(source_url, page.text):
-                item.title = title
-                item.snippet = snippet
-                item.page_title = title
+            for item in self._extract_image_candidates(page.page_url, page_resp.text):
+                item.title = page.title or ""
+                item.snippet = page.snippet or ""
+                item.page_title = page.title or item.page_title
+                item.source_type = page.source_type
+                item.discovery_score = self._score_profile_page(page)
+                item.discovery_evidence = page.discovery_evidence
                 results.append(item)
                 if len(results) >= self._max_results:
                     return results

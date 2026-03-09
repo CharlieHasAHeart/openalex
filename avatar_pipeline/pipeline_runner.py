@@ -245,7 +245,15 @@ class PipelineRunner:
 
         decision = self._matcher.choose_best(author, llm_candidates)
         if not decision:
-            return PipelineResult(author_id=author.author_id, status="ambiguous", error_message="llm_no_confident_match")
+            top = llm_candidates[0] if llm_candidates else None
+            reason_hint = ""
+            if top is not None:
+                reason_hint = f":top_source_type={top.source_type},top_score={top.pre_rank_score}"
+            return PipelineResult(
+                author_id=author.author_id,
+                status="ambiguous",
+                error_message=f"llm_no_confident_match{reason_hint}",
+            )
         if decision.selected_index < 0 or decision.selected_index >= len(llm_candidates):
             return PipelineResult(author_id=author.author_id, status="ambiguous", error_message="llm_invalid_selected_index")
 
@@ -265,6 +273,9 @@ class PipelineRunner:
                     evidence={
                         "selected_index": decision.selected_index,
                         "original_index": original_selected_index,
+                        "source_type": chosen.source_type,
+                        "discovery_score": chosen.discovery_score,
+                        "discovery_evidence": chosen.discovery_evidence,
                         "source_url": chosen.source_url,
                         "image_url": chosen.image_url,
                         "source_domain": chosen.source_domain,
@@ -395,6 +406,25 @@ class PipelineRunner:
             trust_score -= 0.8
         if candidate.snippet and any(k in candidate.snippet.lower() for k in ("professor", "faculty", "researcher", "profile")):
             trust_score += 0.4
+
+        source_type_score = 0.0
+        source_type = (candidate.source_type or "generic_search_result").lower()
+        if source_type == "orcid_external_link":
+            source_type_score += 2.5
+        elif source_type == "institution_profile":
+            source_type_score += 2.2
+        elif source_type == "institution_directory":
+            source_type_score += 1.6
+        elif source_type == "lab_people_page":
+            source_type_score += 1.1
+        elif source_type == "orcid_profile":
+            source_type_score += 1.2
+        else:
+            source_type_score += 0.2
+        trust_score += source_type_score
+
+        discovery_score = float(candidate.discovery_score or 0.0)
+        trust_score += min(discovery_score * 0.35, 1.8)
 
         image_score = 0.0
         if candidate.is_valid_image is False:
