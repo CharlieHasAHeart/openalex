@@ -83,6 +83,11 @@ class LlmMatcher:
                 "name_proximity_score": c.name_proximity_score,
                 "context_block_type": c.context_block_type,
                 "structure_evidence": c.structure_evidence,
+                "merged_count": c.merged_count,
+                "supporting_source_types": c.supporting_source_types,
+                "supporting_source_domains": c.supporting_source_domains,
+                "content_deduped": c.content_deduped,
+                "cluster_evidence_summary": c.cluster_evidence_summary,
                 "pre_rank_score": c.pre_rank_score,
                 "name_match_score": c.name_match_score,
                 "institution_match_score": c.institution_match_score,
@@ -107,6 +112,7 @@ class LlmMatcher:
             "Prefer candidates discovered from official orcid-linked pages, faculty/staff profile pages, "
             "or institutional people pages over generic search results.\n"
             "Prefer images that appear in a profile header, faculty card, or name-matched people card over generic page images.\n"
+            "Prefer candidates supported by multiple consistent sources over isolated single-source candidates.\n"
             f"author={json.dumps(author_ctx, ensure_ascii=False)}\n"
             f"candidate_evidence={json.dumps(options, ensure_ascii=False)}"
         )

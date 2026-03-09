@@ -199,6 +199,18 @@ class PipelineRunner:
                 str(exc),
             )
 
+        try:
+            clustered_candidates = self._web_search.cluster_candidates(candidates, fingerprint_top_n=8)
+            if clustered_candidates:
+                candidates = clustered_candidates
+        except Exception as exc:
+            logger.error(
+                "pipeline_candidate_cluster_failed run_id=%s author_id=%s error_message=%s",
+                self._run_id,
+                author.author_id,
+                str(exc),
+            )
+
         candidate_id_by_index: dict[int, int] = {}
         if self._run_id:
             for idx, raw_candidate in enumerate(candidates):
@@ -276,6 +288,11 @@ class PipelineRunner:
                         "source_type": chosen.source_type,
                         "discovery_score": chosen.discovery_score,
                         "discovery_evidence": chosen.discovery_evidence,
+                        "merged_count": chosen.merged_count,
+                        "supporting_source_types": chosen.supporting_source_types,
+                        "supporting_source_domains": chosen.supporting_source_domains,
+                        "content_deduped": chosen.content_deduped,
+                        "cluster_evidence_summary": chosen.cluster_evidence_summary,
                         "page_image_role": chosen.page_image_role,
                         "page_image_position_score": chosen.page_image_position_score,
                         "name_proximity_score": chosen.name_proximity_score,
@@ -430,6 +447,17 @@ class PipelineRunner:
 
         discovery_score = float(candidate.discovery_score or 0.0)
         trust_score += min(discovery_score * 0.35, 1.8)
+        cluster_bonus = 0.0
+        merged_count = int(candidate.merged_count or 1)
+        if merged_count > 1:
+            cluster_bonus += min((merged_count - 1) * 0.25, 1.0)
+        domains = candidate.supporting_source_domains or []
+        source_types = candidate.supporting_source_types or []
+        if len(domains) >= 2:
+            cluster_bonus += 0.4
+        if any(t in {"orcid_external_link", "institution_profile", "institution_directory", "lab_people_page"} for t in source_types):
+            cluster_bonus += 0.3
+        trust_score += cluster_bonus
 
         structure_score = 0.0
         role = (candidate.page_image_role or "").lower()

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from html import unescape
-from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urlencode, urljoin, urlparse, urlunparse
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
@@ -42,6 +43,19 @@ class SearchCandidate:
     name_proximity_score: float | None = None
     context_block_type: str | None = None
     structure_evidence: str | None = None
+    normalized_image_url: str | None = None
+    image_fingerprint: str | None = None
+    merged_count: int | None = None
+    supporting_source_types: list[str] | None = None
+    supporting_source_domains: list[str] | None = None
+    content_deduped: bool | None = None
+    cluster_evidence_summary: str | None = None
+
+
+@dataclass(slots=True)
+class CandidateCluster:
+    canonical: SearchCandidate
+    members: list[SearchCandidate]
 
 
 @dataclass(slots=True)
@@ -162,6 +176,101 @@ class WebSearchClient:
         if page.source_type == "generic_search_result":
             score -= 0.2
         return score
+
+    def _normalize_image_url(self, image_url: str) -> str:
+        parsed = urlparse(image_url)
+        query = parse_qs(parsed.query)
+        drop_keys = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "cache", "cb", "v", "version", "width", "height", "w", "h", "size"}
+        cleaned_query: dict[str, list[str]] = {}
+        for key, values in query.items():
+            if key.lower() in drop_keys:
+                continue
+            cleaned_query[key] = values
+        query_str = urlencode(cleaned_query, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", query_str, ""))
+
+    def _file_stem_key(self, image_url: str) -> str:
+        path = urlparse(image_url).path.lower()
+        filename = path.rsplit("/", 1)[-1]
+        filename = re.sub(r"[-_]?\\d{2,4}x\\d{2,4}", "", filename)
+        filename = re.sub(r"[^a-z0-9.]+", "", filename)
+        return filename
+
+    def _candidate_strength(self, candidate: SearchCandidate) -> float:
+        structure = float(candidate.page_image_position_score or 0.0) + float(candidate.name_proximity_score or 0.0)
+        discovery = float(candidate.discovery_score or 0.0)
+        size_bonus = 0.0
+        if candidate.width and candidate.height:
+            size_bonus = min((candidate.width * candidate.height) / 500000.0, 3.0)
+        validity = 0.5 if candidate.is_valid_image else 0.0
+        return structure + discovery + size_bonus + validity
+
+    def _choose_canonical(self, members: list[SearchCandidate]) -> SearchCandidate:
+        if not members:
+            raise ValueError("members must not be empty")
+        return max(members, key=self._candidate_strength)
+
+    def cluster_candidates(self, candidates: list[SearchCandidate], fingerprint_top_n: int = 8) -> list[SearchCandidate]:
+        if not candidates:
+            return candidates
+        # 1) URL-level + same-page-size-variant grouping.
+        grouped: dict[str, list[SearchCandidate]] = {}
+        for c in candidates:
+            normalized = self._normalize_image_url(c.image_url)
+            c.normalized_image_url = normalized
+            page_host = urlparse(c.source_url).netloc.lower()
+            stem = self._file_stem_key(c.image_url)
+            group_key = f"{page_host}|{stem or normalized}"
+            grouped.setdefault(group_key, []).append(c)
+
+        clusters: list[CandidateCluster] = []
+        for members in grouped.values():
+            canonical = self._choose_canonical(members)
+            clusters.append(CandidateCluster(canonical=canonical, members=members))
+
+        # 2) Limited content-level dedupe for high-priority candidates.
+        clusters.sort(key=lambda cc: self._candidate_strength(cc.canonical), reverse=True)
+        top = clusters[: max(1, min(fingerprint_top_n, len(clusters)))]
+        fp_map: dict[str, CandidateCluster] = {}
+        merged_by_fp: list[CandidateCluster] = []
+        for cluster in top:
+            c = cluster.canonical
+            try:
+                content, _ = self.download_image(c.image_url)
+                c.image_fingerprint = hashlib.sha256(content).hexdigest()
+            except Exception:
+                c.image_fingerprint = None
+            fp = c.image_fingerprint
+            if not fp:
+                merged_by_fp.append(cluster)
+                continue
+            existing = fp_map.get(fp)
+            if existing is None:
+                fp_map[fp] = cluster
+                merged_by_fp.append(cluster)
+            else:
+                existing.members.extend(cluster.members)
+                # keep stronger canonical
+                existing.canonical = self._choose_canonical([existing.canonical, cluster.canonical])
+
+        if len(clusters) > len(top):
+            merged_by_fp.extend(clusters[len(top):])
+
+        # 3) finalize canonical cluster metadata
+        finalized: list[SearchCandidate] = []
+        for cluster in merged_by_fp:
+            canonical = self._choose_canonical(cluster.members)
+            domains = sorted({(m.source_domain or "") for m in cluster.members if m.source_domain})[:6]
+            source_types = sorted({(m.source_type or "") for m in cluster.members if m.source_type})[:6]
+            canonical.merged_count = len(cluster.members)
+            canonical.supporting_source_domains = domains
+            canonical.supporting_source_types = source_types
+            canonical.content_deduped = any(m.image_fingerprint for m in cluster.members if m is not canonical)
+            canonical.cluster_evidence_summary = (
+                f"merged={len(cluster.members)}, sources={len(domains)}, types={','.join(source_types[:3]) or 'unknown'}"
+            )
+            finalized.append(canonical)
+        return finalized
 
     def _dedupe_profile_pages(self, pages: list[ProfilePageCandidate]) -> list[ProfilePageCandidate]:
         deduped: dict[str, ProfilePageCandidate] = {}
@@ -621,6 +730,7 @@ class WebSearchClient:
                 content, mime = self.download_image(candidate.image_url)
                 candidate.mime = mime or candidate.mime
                 candidate.size_bytes = len(content)
+                candidate.image_fingerprint = hashlib.sha256(content).hexdigest() if content else None
                 candidate.width, candidate.height = self._parse_image_size(content, candidate.mime)
                 if candidate.width and candidate.height:
                     candidate.is_portrait = candidate.height >= candidate.width
