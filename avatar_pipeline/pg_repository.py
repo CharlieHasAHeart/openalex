@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from datetime import datetime
 import time
+import uuid
 from typing import Any
 
 import psycopg
@@ -73,71 +75,61 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             updated_at,
             commons_file
         FROM public.authors_avatars
-        WHERE author_id = %s
+        WHERE author_id::text = %s
         """
+
         def _op():
             with self._conn.cursor() as cur:
                 cur.execute(sql, (author_id,))
                 return cur.fetchone()
+
         return self._run_with_reconnect(_op)
 
     def get_existing_by_author_id(self, author_id: str) -> dict[str, Any] | None:
         return self.get_author_avatar_record(author_id)
 
     def get_avatar_state(self, author_id: str) -> dict[str, Any] | None:
-        record = self.get_author_avatar_record(author_id)
-        if record is None:
-            return None
-        return {
-            "author_id": record.get("author_id"),
-            "status": None,
-            "updated_at": record.get("updated_at"),
-        }
+        sql = """
+        SELECT
+            author_id,
+            status,
+            COALESCE(finished_at, created_at) AS updated_at,
+            error_code,
+            error_message,
+            final_score
+        FROM openalex.avatar_pipeline_author_runs
+        WHERE author_id::text = %s
+        ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
+        LIMIT 1
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, (author_id,))
+                return cur.fetchone()
+
+        return self._run_with_reconnect(_op)
 
     def list_invalid_image_too_small_author_ids(self, limit: int | None = None) -> list[str]:
         sql = """
         SELECT author_id
-        FROM openalex.authors_avatars
+        FROM openalex.avatar_pipeline_author_runs
         WHERE status = 'invalid_image'
           AND error_message IN ('invalid_image_too_small', 'invalid_image_too_small_bytes')
-        ORDER BY updated_at DESC
+        ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
         """
         params: tuple[Any, ...] = ()
         if limit is not None and limit > 0:
             sql += " LIMIT %s"
             params = (limit,)
+
         def _op():
             with self._conn.cursor() as cur:
                 cur.execute(sql, params)
                 return cur.fetchall() or []
+
         rows = self._run_with_reconnect(_op)
-        return [row["author_id"] for row in rows]
-
-    def list_author_ids_from_authors(self, limit: int | None = None, offset: int = 0) -> list[str]:
-        params: list[Any] = []
-        safe_offset = max(offset, 0)
-        if limit is not None and limit > 0:
-            params.append(limit)
-        if safe_offset > 0:
-            params.append(safe_offset)
-
-        def _build_sql(table_name: str) -> str:
-            sql = f"SELECT id FROM {table_name} ORDER BY id"
-            if limit is not None and limit > 0:
-                sql += " LIMIT %s"
-            if safe_offset > 0:
-                sql += " OFFSET %s"
-            return sql
-
-        def _op():
-            with self._conn.cursor() as cur:
-                try:
-                    cur.execute(_build_sql("authors"), tuple(params))
-                except psycopg.errors.UndefinedTable:
-                    cur.execute(_build_sql("openalex.authors"), tuple(params))
-                return cur.fetchall() or []
-        rows = self._run_with_reconnect(_op)
-        return [str(row["id"]).strip() for row in rows if row.get("id") is not None]
+        return [str(row["author_id"]) for row in rows if row.get("author_id") is not None]
 
     def _resolve_authors_ids_table_and_id_col(self) -> tuple[str, str]:
         if self._authors_ids_table_and_id_col is not None:
@@ -149,6 +141,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                     with self._conn.cursor() as cur:
                         cur.execute(f"SELECT * FROM {table} LIMIT 0")
                         return [desc.name for desc in (cur.description or [])]
+
                 cols = self._run_with_reconnect(_op)
                 if not cols:
                     continue
@@ -173,6 +166,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                     with self._conn.cursor() as cur:
                         cur.execute(f"SELECT * FROM {table} LIMIT 0")
                         return [desc.name for desc in (cur.description or [])]
+
                 cols = self._run_with_reconnect(_op)
                 if not cols:
                     continue
@@ -239,6 +233,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             with self._conn.cursor() as cur:
                 cur.execute(sql, tuple(params))
                 return cur.fetchall() or []
+
         rows = self._run_with_reconnect(_op)
         records: list[AuthorRecord] = []
         for row in rows:
@@ -265,10 +260,12 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         WHERE {id_col}::text = ANY(%s)
           AND COALESCE(NULLIF(TRIM(orcid), ''), NULL) IS NOT NULL
         """
+
         def _op():
             with self._conn.cursor() as cur:
                 cur.execute(sql, (normalized_ids,))
                 return cur.fetchall() or []
+
         rows = self._run_with_reconnect(_op)
         records: list[AuthorRecord] = []
         for row in rows:
@@ -297,6 +294,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             with self._conn.cursor() as cur:
                 cur.execute(sql, tuple(params))
                 return cur.fetchall() or []
+
         rows = self._run_with_reconnect(_op)
 
         pairs: list[tuple[str, str | None]] = []
@@ -314,11 +312,13 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             return []
 
         table, id_col = self._resolve_authors_ids_table_and_id_col()
-        sql = f"SELECT {id_col} AS author_id, orcid FROM {table} WHERE {id_col} = ANY(%s)"
+        sql = f"SELECT {id_col} AS author_id, orcid FROM {table} WHERE {id_col}::text = ANY(%s)"
+
         def _op():
             with self._conn.cursor() as cur:
                 cur.execute(sql, (normalized_ids,))
                 return cur.fetchall() or []
+
         rows = self._run_with_reconnect(_op)
 
         pairs: list[tuple[str, str | None]] = []
@@ -330,6 +330,269 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             pairs.append((str(author_id).strip(), str(orcid).strip() if orcid is not None else None))
         return pairs
 
+    def create_pipeline_run(
+        self,
+        trigger_type: str,
+        status: str = "running",
+        config_snapshot: dict[str, Any] | None = None,
+        operator: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        run_id = str(uuid.uuid4())
+        sql = """
+        INSERT INTO openalex.avatar_pipeline_runs (
+            run_id,
+            trigger_type,
+            status,
+            config_snapshot,
+            operator,
+            notes
+        )
+        VALUES (%s::uuid, %s, %s, %s::jsonb, %s, %s)
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, (run_id, trigger_type, status, config_snapshot, operator, notes))
+                return None
+
+        self._run_with_reconnect(_op)
+        return run_id
+
+    def finish_pipeline_run(self, run_id: str, status: str, notes: str | None = None) -> None:
+        sql = """
+        UPDATE openalex.avatar_pipeline_runs
+        SET
+            status = %s,
+            notes = COALESCE(%s, notes),
+            finished_at = NOW()
+        WHERE run_id = %s::uuid
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, (status, notes, run_id))
+                return None
+
+        self._run_with_reconnect(_op)
+
+    def insert_author_run(
+        self,
+        run_id: str,
+        author_id: int,
+        status: str,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        selected_candidate_id: int | None = None,
+        rule_score: float | None = None,
+        llm_score: float | None = None,
+        final_score: float | None = None,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> int:
+        sql = """
+        INSERT INTO openalex.avatar_pipeline_author_runs (
+            run_id,
+            author_id,
+            status,
+            error_code,
+            error_message,
+            selected_candidate_id,
+            rule_score,
+            llm_score,
+            final_score,
+            started_at,
+            finished_at
+        )
+        VALUES (
+            %s::uuid,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            COALESCE(%s, NOW()),
+            %s
+        )
+        RETURNING id
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    (
+                        run_id,
+                        author_id,
+                        status,
+                        error_code,
+                        error_message,
+                        selected_candidate_id,
+                        rule_score,
+                        llm_score,
+                        final_score,
+                        started_at,
+                        finished_at,
+                    ),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError("insert_author_run failed to return id")
+                return int(row["id"])
+
+        return self._run_with_reconnect(_op)
+
+    def insert_candidate_image(
+        self,
+        run_id: str,
+        author_id: int,
+        query_used: str | None = None,
+        source_page_url: str | None = None,
+        source_image_url: str | None = None,
+        source_domain: str | None = None,
+        page_title: str | None = None,
+        snippet: str | None = None,
+        nearby_text: str | None = None,
+        image_alt: str | None = None,
+        mime_type: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        size_bytes: int | None = None,
+        face_count: int | None = None,
+        is_portrait: bool | None = None,
+        is_valid_image: bool | None = None,
+        invalid_reason: str | None = None,
+    ) -> int:
+        sql = """
+        INSERT INTO openalex.avatar_candidate_images (
+            run_id,
+            author_id,
+            query_used,
+            source_page_url,
+            source_image_url,
+            source_domain,
+            page_title,
+            snippet,
+            nearby_text,
+            image_alt,
+            mime_type,
+            width,
+            height,
+            size_bytes,
+            face_count,
+            is_portrait,
+            is_valid_image,
+            invalid_reason
+        )
+        VALUES (
+            %s::uuid,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s
+        )
+        RETURNING candidate_id
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    (
+                        run_id,
+                        author_id,
+                        query_used,
+                        source_page_url,
+                        source_image_url,
+                        source_domain,
+                        page_title,
+                        snippet,
+                        nearby_text,
+                        image_alt,
+                        mime_type,
+                        width,
+                        height,
+                        size_bytes,
+                        face_count,
+                        is_portrait,
+                        is_valid_image,
+                        invalid_reason,
+                    ),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError("insert_candidate_image failed to return candidate_id")
+                return int(row["candidate_id"])
+
+        return self._run_with_reconnect(_op)
+
+    def insert_candidate_decision(
+        self,
+        candidate_id: int,
+        run_id: str,
+        author_id: int,
+        decision: str,
+        rule_score: float | None = None,
+        llm_score: float | None = None,
+        final_score: float | None = None,
+        decision_reason: str | None = None,
+        evidence: dict[str, Any] | None = None,
+    ) -> int:
+        sql = """
+        INSERT INTO openalex.avatar_candidate_decisions (
+            candidate_id,
+            run_id,
+            author_id,
+            decision,
+            rule_score,
+            llm_score,
+            final_score,
+            decision_reason,
+            evidence
+        )
+        VALUES (%s, %s::uuid, %s, %s, %s, %s, %s, %s, %s::jsonb)
+        RETURNING id
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    (
+                        candidate_id,
+                        run_id,
+                        author_id,
+                        decision,
+                        rule_score,
+                        llm_score,
+                        final_score,
+                        decision_reason,
+                        evidence,
+                    ),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError("insert_candidate_decision failed to return id")
+                return int(row["id"])
+
+        return self._run_with_reconnect(_op)
+
     def upsert_result(self, result: PipelineResult) -> None:
         if result.status != "ok":
             return
@@ -340,6 +603,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             "commons_file": result.commons_file,
             "content_sha256": result.content_sha256,
         }
+
         def _op():
             with self._conn.cursor() as cur:
                 sql_ok = """
