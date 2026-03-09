@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from avatar_pipeline.avatar_gate import validate_image_candidate
 from avatar_pipeline.config import PipelineConfig
 from avatar_pipeline.llm_matcher import LlmMatcher
-from avatar_pipeline.models import AuthorRecord, FinalDecisionAssessment, ImageCandidate, PipelineResult
+from avatar_pipeline.models import AuthorRecord, FinalDecisionAssessment, ImageCandidate, PipelineResult, ReviewAssessment
 from avatar_pipeline.oss_uploader import OssUploader, sha256_hex
 from avatar_pipeline.pg_repository import PgRepository
 from avatar_pipeline.web_search_client import WebSearchClient
@@ -122,7 +122,7 @@ class PipelineRunner:
 
         self._stats[result.status] += 1
         logger.info(
-            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s selected_candidate_id=%s llm_confidence=%s decision_mode=%s acceptance_score=%s fallback_used=%s error_message=%s persist_error=%s run_persist_error=%s",
+            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s selected_candidate_id=%s llm_confidence=%s decision_mode=%s acceptance_score=%s fallback_used=%s review_recommendation=%s error_message=%s persist_error=%s run_persist_error=%s",
             self._run_id,
             author.author_id,
             author.orcid,
@@ -134,6 +134,7 @@ class PipelineRunner:
             result.decision_mode,
             result.acceptance_score,
             result.fallback_used,
+            result.review_recommendation,
             result.error_message,
             persist_error,
             run_persist_error,
@@ -321,6 +322,26 @@ class PipelineRunner:
         original_selected_index = top_index_to_original[selected_llm_index]
         chosen = candidates[original_selected_index]
         selected_candidate_id = candidate_id_by_index.get(original_selected_index)
+        review_assessment: ReviewAssessment
+        try:
+            review_assessment = self._build_review_assessment(
+                chosen,
+                assessment,
+                float(decision.confidence),
+                top_candidate_count=len(llm_candidates),
+            )
+        except Exception as exc:
+            logger.error(
+                "pipeline_review_assessment_failed run_id=%s author_id=%s error_message=%s",
+                self._run_id,
+                author.author_id,
+                str(exc),
+            )
+            review_assessment = ReviewAssessment(
+                review_summary="review_assessment_failed",
+                review_risk_flags=[],
+                review_recommendation="needs_review",
+            )
         if self._run_id and selected_candidate_id is not None:
             try:
                 self._repo.insert_candidate_decision(
@@ -343,6 +364,9 @@ class PipelineRunner:
                         "fallback_from_index": decision.selected_index if assessment.fallback_used else None,
                         "fallback_to_index": selected_llm_index if assessment.fallback_used else None,
                         "fallback_reason": assessment.decision_reason if assessment.fallback_used else None,
+                        "review_summary": review_assessment.review_summary,
+                        "review_risk_flags": review_assessment.review_risk_flags,
+                        "review_recommendation": review_assessment.review_recommendation,
                         "source_type": chosen.source_type,
                         "discovery_score": chosen.discovery_score,
                         "discovery_evidence": chosen.discovery_evidence,
@@ -413,6 +437,7 @@ class PipelineRunner:
                 decision_mode=assessment.decision_mode,
                 acceptance_score=assessment.acceptance_score,
                 fallback_used=assessment.fallback_used,
+                review_recommendation=review_assessment.review_recommendation,
             )
 
         sha256 = sha256_hex(image_bytes)
@@ -431,6 +456,7 @@ class PipelineRunner:
                 decision_mode=assessment.decision_mode,
                 acceptance_score=assessment.acceptance_score,
                 fallback_used=assessment.fallback_used,
+                review_recommendation=review_assessment.review_recommendation,
             )
 
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, candidate.mime)
@@ -448,6 +474,7 @@ class PipelineRunner:
             decision_mode=assessment.decision_mode,
             acceptance_score=assessment.acceptance_score,
             fallback_used=assessment.fallback_used,
+            review_recommendation=review_assessment.review_recommendation,
         )
 
     def _source_type_reliability(self, source_type: str | None) -> float:
@@ -577,6 +604,73 @@ class PipelineRunner:
             score_margin=score_margin if best_other is not None else None,
             decision_reason="moderate_acceptance_passed_threshold",
             decision_mode="direct_accept",
+        )
+
+    def _build_review_assessment(
+        self,
+        candidate,
+        assessment: FinalDecisionAssessment,
+        llm_confidence: float,
+        top_candidate_count: int,
+    ) -> ReviewAssessment:
+        risk_flags: list[str] = []
+        acceptance_score = float(assessment.acceptance_score or 0.0)
+        margin = float(assessment.score_margin or 0.0) if assessment.score_margin is not None else 0.0
+        merged_count = int(candidate.merged_count or 1)
+        source_type = (candidate.source_type or "generic_search_result").lower()
+        role = (candidate.page_image_role or "").lower()
+
+        if llm_confidence < 0.6:
+            risk_flags.append("low_llm_confidence")
+        if acceptance_score < 0.62:
+            risk_flags.append("low_acceptance_score")
+        if assessment.score_margin is not None and margin < 0.35:
+            risk_flags.append("small_margin")
+        if assessment.fallback_used:
+            risk_flags.append("fallback_used")
+        if merged_count <= 1:
+            risk_flags.append("single_source_only")
+        if source_type == "generic_search_result":
+            risk_flags.append("generic_source_selected")
+        if role not in {"profile_headshot", "card_headshot"}:
+            risk_flags.append("weak_structure_evidence")
+        if candidate.is_valid_image is False or candidate.invalid_reason:
+            risk_flags.append("invalid_image_precheck_risk")
+        if merged_count <= 1 and len(candidate.supporting_source_domains or []) <= 1:
+            risk_flags.append("cluster_support_weak")
+
+        if assessment.decision_mode == "ambiguous":
+            recommendation = "ambiguous"
+        else:
+            low_risk = (
+                assessment.decision_mode == "direct_accept"
+                and acceptance_score >= 0.72
+                and (assessment.score_margin is None or margin >= 0.45)
+                and source_type != "generic_search_result"
+                and merged_count > 1
+                and role in {"profile_headshot", "card_headshot"}
+                and candidate.is_valid_image is not False
+            )
+            recommendation = "auto_accept" if low_risk else "needs_review"
+
+        summary_parts = [
+            source_type,
+            role or "unknown_role",
+            f"merged={merged_count}",
+            f"mode={assessment.decision_mode}",
+            f"acc={acceptance_score:.2f}",
+        ]
+        if assessment.score_margin is not None:
+            summary_parts.append(f"margin={margin:.2f}")
+        if assessment.fallback_used:
+            summary_parts.append("fallback_used")
+        if recommendation == "needs_review":
+            summary_parts.append("review_advised")
+        summary = ", ".join(summary_parts)
+        return ReviewAssessment(
+            review_summary=summary,
+            review_risk_flags=sorted(set(risk_flags)),
+            review_recommendation=recommendation,
         )
 
     def _score_candidate(self, author: AuthorRecord, candidate) -> tuple[float, float, float, float]:

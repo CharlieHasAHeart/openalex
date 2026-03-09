@@ -635,3 +635,37 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                 return None
 
         self._run_with_reconnect(_op)
+
+    def list_recent_decision_summaries(self, limit: int = 50) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(limit, 1000))
+        sql = """
+        SELECT
+            ar.author_id,
+            ar.status,
+            ar.selected_candidate_id,
+            ar.final_score AS acceptance_score,
+            COALESCE(ar.finished_at, ar.created_at) AS updated_at,
+            (d.evidence ->> 'decision_mode') AS decision_mode,
+            COALESCE((d.evidence ->> 'fallback_used')::boolean, false) AS fallback_used,
+            d.evidence ->> 'review_recommendation' AS review_recommendation,
+            d.evidence -> 'review_risk_flags' AS review_risk_flags,
+            d.evidence ->> 'review_summary' AS review_summary
+        FROM openalex.avatar_pipeline_author_runs ar
+        LEFT JOIN LATERAL (
+            SELECT d1.evidence
+            FROM openalex.avatar_candidate_decisions d1
+            WHERE d1.run_id = ar.run_id
+              AND d1.author_id = ar.author_id
+            ORDER BY d1.created_at DESC, d1.id DESC
+            LIMIT 1
+        ) d ON true
+        ORDER BY COALESCE(ar.finished_at, ar.created_at) DESC, ar.id DESC
+        LIMIT %s
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, (safe_limit,))
+                return cur.fetchall() or []
+
+        return self._run_with_reconnect(_op)

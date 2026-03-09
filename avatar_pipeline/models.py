@@ -74,6 +74,7 @@ class PipelineResult:
     decision_mode: str | None = None
     acceptance_score: float | None = None
     fallback_used: bool | None = None
+    review_recommendation: str | None = None
 
 
 @dataclass(slots=True)
@@ -85,6 +86,13 @@ class FinalDecisionAssessment:
     score_margin: float | None = None
     decision_reason: str = ""
     decision_mode: str = "ambiguous"
+
+
+@dataclass(slots=True)
+class ReviewAssessment:
+    review_summary: str
+    review_risk_flags: list[str]
+    review_recommendation: str
 
 
 @dataclass(slots=True)
