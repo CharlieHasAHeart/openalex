@@ -106,6 +106,8 @@ class PipelineConfig:
     llm_timeout_seconds: int
     websearch_max_results: int
     search_provider: str
+    qwen_base_url: str
+    qwen_response_path: str
     qwen_model: str
     qwen_enable_web_search: bool
     qwen_enable_t2i_search: bool
@@ -169,6 +171,8 @@ class PipelineConfig:
             llm_timeout_seconds=int(_get_env("LLM_TIMEOUT_SECONDS", "30")),
             websearch_max_results=int(_get_env("WEBSEARCH_MAX_RESULTS", "8")),
             search_provider=_get_env("SEARCH_PROVIDER", "hybrid"),
+            qwen_base_url=_get_env("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"),
+            qwen_response_path=_get_env("QWEN_RESPONSE_PATH", "/responses"),
             qwen_model=_get_env("QWEN_MODEL", "qwen3.5-plus"),
             qwen_enable_web_search=_bool_env("QWEN_ENABLE_WEB_SEARCH", True),
             qwen_enable_t2i_search=_bool_env("QWEN_ENABLE_T2I_SEARCH", True),

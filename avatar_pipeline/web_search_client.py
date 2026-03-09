@@ -222,6 +222,12 @@ class QwenSearchProvider(BaseSearchProvider):
             "provider": "qwen",
             "profile_pages_count": len(result.profile_pages),
             "t2i_candidates_count": len(result.image_candidates),
+            "filtered_candidates_count": len(result.filtered_candidates),
+            "invalid_profile_pages_count": result.invalid_profile_page_count,
+            "invalid_image_candidates_count": result.invalid_image_candidate_count,
+            "invalid_filtered_candidates_count": result.invalid_filtered_candidate_count,
+            "schema_issue_count": result.schema_issue_count,
+            "qwen_failure_reason": result.failure_reason,
         }
         if result.failure_reason:
             reason_tags.add(result.failure_reason)
@@ -229,11 +235,17 @@ class QwenSearchProvider(BaseSearchProvider):
             reason_tags.add("qwen_no_profile_pages")
         if not result.image_candidates:
             reason_tags.add("qwen_no_image_candidates")
+        if not result.filtered_candidates:
+            reason_tags.add("qwen_empty_filtered_candidates")
         logger.info(
-            "qwen_provider_raw_counts author_id=%s profile_pages=%s t2i_candidates=%s",
+            "qwen_provider_raw_counts author_id=%s profile_pages=%s t2i_candidates=%s filtered_candidates=%s invalid_profile=%s invalid_image=%s invalid_filtered=%s",
             author.author_id,
             len(result.profile_pages),
             len(result.image_candidates),
+            len(result.filtered_candidates),
+            result.invalid_profile_page_count,
+            result.invalid_image_candidate_count,
+            result.invalid_filtered_candidate_count,
         )
         parsed: list[SearchCandidate] = []
         low_conf_only = True
@@ -247,13 +259,15 @@ class QwenSearchProvider(BaseSearchProvider):
             parsed.append(cand)
             if len(parsed) >= self._max_candidates:
                 break
-        if low_conf_only and result.filtered_candidates:
+        if low_conf_only and result.filtered_candidates and not parsed:
             reason_tags.add("qwen_low_confidence_only")
         logger.info(
-            "qwen_provider_kept author_id=%s kept=%s reasons=%s",
+            "qwen_provider_kept author_id=%s kept=%s filtered_candidates=%s reasons=%s failure_reason=%s",
             author.author_id,
             len(parsed),
+            len(result.filtered_candidates),
             ",".join(sorted(reason_tags)) if reason_tags else "ok",
+            result.failure_reason,
         )
         metadata["kept_count"] = len(parsed)
         return ProviderSearchResult(candidates=parsed, reason_tags=reason_tags, metadata=metadata)
@@ -270,13 +284,14 @@ class WebSearchClient:
         profile_image_score_threshold: float = 0.35,
         search_provider: str = "hybrid",
         qwen_api_key: str | None = None,
-        qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode",
+        qwen_base_url: str = "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1",
         qwen_model: str = "qwen3.5-plus",
         qwen_enable_web_search: bool = True,
         qwen_enable_t2i_search: bool = True,
         qwen_max_candidates: int = 8,
         qwen_min_confidence: float = 0.55,
         qwen_timeout_seconds: int = 30,
+        qwen_response_path: str = "/responses",
     ) -> None:
         self._http = http
         self._max_results = max(1, max_results)
@@ -299,6 +314,7 @@ class WebSearchClient:
             enable_web_search=qwen_enable_web_search,
             enable_t2i_search=qwen_enable_t2i_search,
             min_confidence=qwen_min_confidence,
+            response_path=qwen_response_path,
         )
         self._qwen_provider = QwenSearchProvider(
             client=self,
@@ -1436,13 +1452,8 @@ class WebSearchClient:
                 metadata.update({f"legacy_{k}": v for k, v in legacy_result.metadata.items()})
                 final_candidates = self._merge_candidates(final_candidates, legacy_result.candidates)
 
-        if not final_candidates:
-            if mode in {"qwen", "hybrid"} and "qwen_no_profile_pages" in reason_tags:
-                reason_tags.add("qwen_web_search_failed")
-            if mode in {"qwen", "hybrid"} and "qwen_no_image_candidates" in reason_tags:
-                reason_tags.add("qwen_t2i_search_failed")
-            if mode == "hybrid" and "legacy_no_candidates" in reason_tags:
-                reason_tags.add("legacy_no_candidates")
+        if not final_candidates and mode == "hybrid" and "legacy_no_candidates" in reason_tags:
+            reason_tags.add("legacy_no_candidates")
 
         metadata["fallback_triggered"] = fallback_triggered
         metadata["final_candidate_count"] = len(final_candidates)

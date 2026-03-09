@@ -76,6 +76,8 @@ Important defaults in `config.py`:
 - allowed mime: `image/jpeg,image/png,image/webp`
 - web search max: `WEBSEARCH_MAX_RESULTS` (default `8`)
 - search provider mode: `SEARCH_PROVIDER` (`qwen` / `legacy` / `hybrid`, default `hybrid`)
+- qwen compatible-mode base URL: `QWEN_BASE_URL` (default `https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1`)
+- qwen response endpoint path: `QWEN_RESPONSE_PATH` (default `/responses`)
 - qwen model: `QWEN_MODEL` (default `qwen3.5-plus`)
 - qwen `web_search` switch: `QWEN_ENABLE_WEB_SEARCH` (default `true`)
 - qwen `t2i_search` switch: `QWEN_ENABLE_T2I_SEARCH` (default `true`)
@@ -200,7 +202,8 @@ Pre-annotation fields:
   - `qwen`: qwen3.5-plus `web_search + t2i_search` only
   - `legacy`: DuckDuckGo/profile extraction only
   - `hybrid`: qwen first, auto-fallback to legacy when candidate recall is insufficient
-- Key diagnostic reasons include: `qwen_web_search_failed`, `qwen_t2i_search_failed`, `qwen_no_profile_pages`, `qwen_no_image_candidates`, `qwen_low_confidence_only`, `fallback_to_legacy`, `legacy_no_candidates`.
+- Qwen provider now calls DashScope compatible-mode Response API (`/responses`) and applies schema validation on model output (`profile_pages`, `image_candidates`, `filtered_candidates`, `failure_reason`).
+- Key diagnostic reasons include: `qwen_api_key_missing`, `qwen_request_failed`, `qwen_http_error`, `qwen_response_decode_failed`, `qwen_output_missing`, `qwen_output_not_json`, `qwen_schema_invalid`, `qwen_no_profile_pages`, `qwen_no_image_candidates`, `qwen_low_confidence_only`, `qwen_empty_filtered_candidates`, `fallback_to_legacy`, `legacy_no_candidates`.
 
 ## 9. Development Verification
 
