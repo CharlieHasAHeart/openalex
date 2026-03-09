@@ -174,9 +174,39 @@ class PipelineRunner:
                 error_message="missing_orcid",
             )
 
+        provider_mode = "unknown"
+        try:
+            provider_mode = self._web_search.provider_mode()
+        except Exception:
+            provider_mode = "unknown"
+        logger.info(
+            "pipeline_candidate_discovery_start run_id=%s author_id=%s provider_mode=%s",
+            self._run_id,
+            author.author_id,
+            provider_mode,
+        )
+
         candidates = self._web_search.search_image_candidates(author)
         if not candidates:
-            return PipelineResult(author_id=author.author_id, status="no_image", error_message="websearch_no_candidates")
+            reason = "websearch_no_candidates"
+            fallback = None
+            try:
+                diagnostics = self._web_search.last_search_diagnostics()
+                reason_tags = diagnostics.get("reason_tags") or []
+                fallback = diagnostics.get("fallback_triggered")
+                if isinstance(reason_tags, list) and reason_tags:
+                    reason = f"websearch_no_candidates:{'|'.join(reason_tags[:6])}"
+            except Exception:
+                pass
+            logger.info(
+                "pipeline_candidate_discovery_empty run_id=%s author_id=%s provider_mode=%s fallback=%s reason=%s",
+                self._run_id,
+                author.author_id,
+                provider_mode,
+                fallback,
+                reason,
+            )
+            return PipelineResult(author_id=author.author_id, status="no_image", error_message=reason)
 
         try:
             candidates = self._web_search.enrich_candidates_context(candidates, limit=self._context_enrich_limit)

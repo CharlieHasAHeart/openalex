@@ -134,6 +134,15 @@ def _create_runner(config, limiter, run_id: str | None = None):
         person_page_per_query_results=config.person_page_per_query_results,
         person_page_max_fetch=config.person_page_max_fetch,
         profile_image_score_threshold=config.profile_image_score_threshold,
+        search_provider=config.search_provider,
+        qwen_api_key=config.llm_api_key,
+        qwen_base_url=config.llm_base_url,
+        qwen_model=config.qwen_model,
+        qwen_enable_web_search=config.qwen_enable_web_search,
+        qwen_enable_t2i_search=config.qwen_enable_t2i_search,
+        qwen_max_candidates=config.qwen_max_candidates,
+        qwen_min_confidence=config.qwen_min_confidence,
+        qwen_timeout_seconds=config.qwen_timeout_seconds,
     )
     llm_matcher = LlmMatcher(
         api_key=config.llm_api_key,

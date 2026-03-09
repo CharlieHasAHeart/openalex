@@ -15,12 +15,14 @@ It currently supports:
 
 Core runtime flow:
 1. Load author rows from `authors_analysis`.
-2. Discover person/profile pages via DuckDuckGo HTML (no SerpAPI), then extract image candidates from page structure.
-3. Enrich candidates (page context, image metadata), cluster/dedupe, pre-rank.
-4. Use `LlmMatcher` to choose candidate.
-5. Apply final decision gating and review metadata.
-6. Upload accepted image to OSS and upsert production result.
-7. Persist run, candidate, and decision metadata to `openalex` schema.
+2. Discover author image candidates through provider orchestration (`qwen` / `legacy` / `hybrid`).
+3. In `qwen`/`hybrid`, use qwen3.5-plus with `web_search + t2i_search` as primary candidate discovery.
+4. In `legacy`/fallback, use DuckDuckGo HTML + profile-page extraction.
+5. Enrich candidates (page context, image metadata), cluster/dedupe, pre-rank.
+6. Use `LlmMatcher` to choose candidate.
+7. Apply final decision gating and review metadata.
+8. Upload accepted image to OSS and upsert production result.
+9. Persist run, candidate, and decision metadata to `openalex` schema.
 
 Data/benchmark flow:
 1. Build stratified sampling sets (`development`, `frozen_eval`, `shadow`).
@@ -32,7 +34,8 @@ Data/benchmark flow:
 
 - `config.py`: env loading and `PipelineConfig`.
 - `http.py`: retry-aware HTTP client and global QPS limiter.
-- `web_search_client.py`: profile-page discovery, structured image extraction, candidate enrich + clustering.
+- `web_search_client.py`: search orchestrator + provider dispatch + candidate enrich + clustering.
+- `qwen_tools.py`: qwen3.5-plus tool call wrapper (`web_search`, `t2i_search`, structured JSON parsing).
 - `llm_matcher.py`: heuristic/LLM candidate selection.
 - `pipeline_runner.py`: per-author orchestration, gating, persistence calls.
 - `avatar_gate.py`: image mime validation and extension mapping.
@@ -72,6 +75,13 @@ Important defaults in `config.py`:
 - default proxy fallback: `http://127.0.0.1:7890` if no proxy env exists
 - allowed mime: `image/jpeg,image/png,image/webp`
 - web search max: `WEBSEARCH_MAX_RESULTS` (default `8`)
+- search provider mode: `SEARCH_PROVIDER` (`qwen` / `legacy` / `hybrid`, default `hybrid`)
+- qwen model: `QWEN_MODEL` (default `qwen3.5-plus`)
+- qwen `web_search` switch: `QWEN_ENABLE_WEB_SEARCH` (default `true`)
+- qwen `t2i_search` switch: `QWEN_ENABLE_T2I_SEARCH` (default `true`)
+- qwen candidate cap: `QWEN_MAX_CANDIDATES` (default `8`)
+- qwen confidence floor: `QWEN_MIN_CONFIDENCE` (default `0.55`)
+- qwen timeout: `QWEN_TIMEOUT_SECONDS` (default `30`)
 - person-page discovery queries per author: `PERSON_PAGE_QUERY_MAX` (default `7`)
 - per-query search result cap: `PERSON_PAGE_PER_QUERY_RESULTS` (default `5`)
 - max profile pages fetched per author: `PERSON_PAGE_MAX_FETCH` (default `12`)
@@ -186,6 +196,24 @@ Pre-annotation fields:
 - Web search path does not depend on SerpAPI. It uses DuckDuckGo HTML, then a person-page-first extraction strategy.
 - Structured image extraction priority is: `JSON-LD Person.image` -> `og:image` -> profile/people/faculty blocks -> generic `<img>` fallback.
 - Search/extraction emits staged logs for query counts, profile-page recall, per-page extraction buckets, and zero-candidate reasons (`no_search_results`, `no_profile_pages`, `no_structured_images`, `all_images_filtered`, `page_fetch_failed`, `parse_failed`).
+- Candidate discovery now supports provider modes:
+  - `qwen`: qwen3.5-plus `web_search + t2i_search` only
+  - `legacy`: DuckDuckGo/profile extraction only
+  - `hybrid`: qwen first, auto-fallback to legacy when candidate recall is insufficient
+- Key diagnostic reasons include: `qwen_web_search_failed`, `qwen_t2i_search_failed`, `qwen_no_profile_pages`, `qwen_no_image_candidates`, `qwen_low_confidence_only`, `fallback_to_legacy`, `legacy_no_candidates`.
+
+## 9. Development Verification
+
+```bash
+# 1) Qwen only
+SEARCH_PROVIDER=qwen python3 main.py --author-ids-file reports/sampling/development_set.json --author-limit 20 --workers 1 --log-level INFO
+
+# 2) Hybrid (recommended)
+SEARCH_PROVIDER=hybrid python3 main.py --author-ids-file reports/sampling/development_set.json --author-limit 20 --workers 1 --log-level INFO
+
+# 3) Legacy baseline
+SEARCH_PROVIDER=legacy python3 main.py --author-ids-file reports/sampling/development_set.json --author-limit 20 --workers 1 --log-level INFO
+```
 
 ## 8. Typical End-to-End Benchmark Workflow
 

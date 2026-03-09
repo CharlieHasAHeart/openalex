@@ -4,12 +4,15 @@ import hashlib
 import json
 import logging
 import re
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from html import unescape
+from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urljoin, urlparse, urlunparse
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
+from avatar_pipeline.qwen_tools import QwenToolsClient
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,24 @@ class ProfilePageCandidate:
     snippet: str | None = None
 
 
+@dataclass(slots=True)
+class ProviderSearchResult:
+    candidates: list[SearchCandidate]
+    reason_tags: set[str]
+    metadata: dict[str, Any]
+
+
+class BaseSearchProvider(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def search(self, author: AuthorRecord) -> ProviderSearchResult:
+        raise NotImplementedError
+
+
 def _guess_mime_from_url(url: str) -> str:
     lower = url.lower()
     if ".jpg" in lower or ".jpeg" in lower:
@@ -95,6 +116,149 @@ def _extract_uddg(href: str) -> str:
     return href
 
 
+class LegacyWebSearchProvider(BaseSearchProvider):
+    def __init__(self, client: "WebSearchClient") -> None:
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "legacy"
+
+    def search(self, author: AuthorRecord) -> ProviderSearchResult:
+        candidates, reason_tags, metadata = self._client._legacy_discovery(author)
+        return ProviderSearchResult(candidates=candidates, reason_tags=reason_tags, metadata=metadata)
+
+
+class QwenSearchProvider(BaseSearchProvider):
+    def __init__(self, client: "WebSearchClient", qwen_tools: QwenToolsClient, max_candidates: int, min_confidence: float) -> None:
+        self._client = client
+        self._qwen_tools = qwen_tools
+        self._max_candidates = max(1, max_candidates)
+        self._min_confidence = max(0.0, min(1.0, min_confidence))
+
+    @property
+    def name(self) -> str:
+        return "qwen"
+
+    def _normalize_source_type(self, raw: str) -> str:
+        value = (raw or "").strip().lower()
+        mapping = {
+            "institution_profile": "institution_profile",
+            "institution_directory": "institution_directory",
+            "lab_people_page": "lab_people_page",
+            "conference_bio": "conference_bio",
+            "generic_search_result": "generic_search_result",
+            "t2i_result": "t2i_result",
+            "qwen_verified_profile_image": "qwen_verified_profile_image",
+        }
+        if value in mapping:
+            return mapping[value]
+        if any(token in value for token in ("faculty", "profile", "staff", "person")):
+            return "institution_profile"
+        if any(token in value for token in ("people", "directory", "member", "team")):
+            return "institution_directory"
+        if "conference" in value or "speaker" in value or "bio" in value:
+            return "conference_bio"
+        if "t2i" in value:
+            return "t2i_result"
+        return "generic_search_result"
+
+    def _build_candidate(self, author: AuthorRecord, item: dict[str, Any]) -> SearchCandidate | None:
+        image_url = str(item.get("image_url") or "").strip()
+        source_url = str(item.get("source_url") or "").strip()
+        if not image_url or not source_url:
+            return None
+        if not image_url.startswith("http") or not source_url.startswith("http"):
+            return None
+        confidence = item.get("confidence")
+        try:
+            confidence_score = float(confidence)
+        except Exception:
+            confidence_score = 0.0
+        if confidence_score < self._min_confidence:
+            return None
+        source_type = self._normalize_source_type(str(item.get("source_type") or ""))
+        title = str(item.get("title") or "").strip()
+        snippet = str(item.get("snippet") or "").strip()
+        reason = str(item.get("reason") or "").strip()
+        discovery_evidence = f"qwen_filtered(conf={confidence_score:.2f})"
+        if reason:
+            discovery_evidence += f"; reason={reason}"
+        if author.institution_name:
+            discovery_evidence += f"; inst={author.institution_name}"
+        source_domain = urlparse(source_url).hostname
+        return SearchCandidate(
+            image_url=image_url,
+            source_url=source_url,
+            title=title,
+            snippet=snippet,
+            mime=_guess_mime_from_url(image_url),
+            source_type=source_type if source_type != "generic_search_result" else "qwen_verified_profile_image",
+            source_domain=source_domain,
+            discovery_score=2.4 + min(confidence_score, 1.0),
+            discovery_evidence=discovery_evidence,
+            page_title=title or None,
+            image_alt=self._client._clean_text(str(item.get("image_alt") or "")),
+            nearby_text=self._client._clean_text(str(item.get("nearby_text") or "")),
+            page_image_role="qwen_discovered_image",
+            context_block_type="qwen_web_t2i",
+            structure_evidence="qwen:web_search+t2i_search",
+            page_image_position_score=0.95,
+            name_proximity_score=self._client._name_match_strength(
+                " ".join([title, snippet, str(item.get("image_alt") or ""), str(item.get("nearby_text") or ""), source_url]),
+                author.display_name or "",
+            ),
+            institution_match_score=self._client._name_match_strength(
+                " ".join([title, snippet, source_url]),
+                author.institution_name or "",
+            ) if author.institution_name else 0.0,
+        )
+
+    def search(self, author: AuthorRecord) -> ProviderSearchResult:
+        logger.info("qwen_provider_prompt_triggered author_id=%s model=%s", author.author_id, self._qwen_tools.model)
+        result = self._qwen_tools.search_author(author, max_candidates=self._max_candidates)
+        reason_tags: set[str] = set()
+        metadata: dict[str, Any] = {
+            "provider": "qwen",
+            "profile_pages_count": len(result.profile_pages),
+            "t2i_candidates_count": len(result.image_candidates),
+        }
+        if result.failure_reason:
+            reason_tags.add(result.failure_reason)
+        if not result.profile_pages:
+            reason_tags.add("qwen_no_profile_pages")
+        if not result.image_candidates:
+            reason_tags.add("qwen_no_image_candidates")
+        logger.info(
+            "qwen_provider_raw_counts author_id=%s profile_pages=%s t2i_candidates=%s",
+            author.author_id,
+            len(result.profile_pages),
+            len(result.image_candidates),
+        )
+        parsed: list[SearchCandidate] = []
+        low_conf_only = True
+        for row in result.filtered_candidates:
+            if not isinstance(row, dict):
+                continue
+            cand = self._build_candidate(author, row)
+            if cand is None:
+                continue
+            low_conf_only = False
+            parsed.append(cand)
+            if len(parsed) >= self._max_candidates:
+                break
+        if low_conf_only and result.filtered_candidates:
+            reason_tags.add("qwen_low_confidence_only")
+        logger.info(
+            "qwen_provider_kept author_id=%s kept=%s reasons=%s",
+            author.author_id,
+            len(parsed),
+            ",".join(sorted(reason_tags)) if reason_tags else "ok",
+        )
+        metadata["kept_count"] = len(parsed)
+        return ProviderSearchResult(candidates=parsed, reason_tags=reason_tags, metadata=metadata)
+
+
 class WebSearchClient:
     def __init__(
         self,
@@ -104,6 +268,15 @@ class WebSearchClient:
         person_page_per_query_results: int = 5,
         person_page_max_fetch: int = 12,
         profile_image_score_threshold: float = 0.35,
+        search_provider: str = "hybrid",
+        qwen_api_key: str | None = None,
+        qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode",
+        qwen_model: str = "qwen3.5-plus",
+        qwen_enable_web_search: bool = True,
+        qwen_enable_t2i_search: bool = True,
+        qwen_max_candidates: int = 8,
+        qwen_min_confidence: float = 0.55,
+        qwen_timeout_seconds: int = 30,
     ) -> None:
         self._http = http
         self._max_results = max(1, max_results)
@@ -111,6 +284,34 @@ class WebSearchClient:
         self._person_page_per_query_results = max(1, person_page_per_query_results)
         self._person_page_max_fetch = max(1, person_page_max_fetch)
         self._profile_image_score_threshold = max(0.0, profile_image_score_threshold)
+        mode = (search_provider or "hybrid").strip().lower()
+        self._search_provider_mode = mode if mode in {"qwen", "legacy", "hybrid"} else "hybrid"
+        self._last_search_diagnostics: dict[str, Any] = {"provider_mode": self._search_provider_mode, "reason_tags": []}
+
+        self._legacy_provider = LegacyWebSearchProvider(self)
+        self._qwen_provider: BaseSearchProvider | None = None
+        qwen_tools = QwenToolsClient(
+            http=http,
+            api_key=qwen_api_key,
+            base_url=qwen_base_url,
+            model=qwen_model,
+            timeout_seconds=qwen_timeout_seconds,
+            enable_web_search=qwen_enable_web_search,
+            enable_t2i_search=qwen_enable_t2i_search,
+            min_confidence=qwen_min_confidence,
+        )
+        self._qwen_provider = QwenSearchProvider(
+            client=self,
+            qwen_tools=qwen_tools,
+            max_candidates=qwen_max_candidates,
+            min_confidence=qwen_min_confidence,
+        )
+
+    def provider_mode(self) -> str:
+        return self._search_provider_mode
+
+    def last_search_diagnostics(self) -> dict[str, Any]:
+        return dict(self._last_search_diagnostics)
 
     def _build_query(self, author: AuthorRecord) -> str:
         parts = [author.display_name.strip(), "profile photo"]
@@ -1116,11 +1317,11 @@ class WebSearchClient:
                 candidate.invalid_reason = "image_metadata_fetch_failed"
         return candidates
 
-    def search_image_candidates(self, author: AuthorRecord) -> list[SearchCandidate]:
+    def _legacy_discovery(self, author: AuthorRecord) -> tuple[list[SearchCandidate], set[str], dict[str, Any]]:
         profile_pages = self.discover_profile_pages(author)
         if not profile_pages:
             logger.info("websearch_search_image_candidates author_id=%s reason=no_profile_pages candidates=0", author.author_id)
-            return []
+            return [], {"legacy_no_candidates", "no_profile_pages"}, {"provider": "legacy", "profile_pages": 0}
         results: list[SearchCandidate] = []
         reason_tags: set[str] = set()
         parse_failures = 0
@@ -1174,11 +1375,13 @@ class WebSearchClient:
                         author.author_id,
                         len(results),
                     )
-                    return results
+                    return results, reason_tags, {"provider": "legacy", "profile_pages": len(profile_pages)}
         if parse_failures and parse_failures == len(profile_pages):
             reason_tags.add("parse_failed")
         if not results and not reason_tags:
             reason_tags.add("all_images_filtered")
+        if not results:
+            reason_tags.add("legacy_no_candidates")
         logger.info(
             "websearch_search_image_candidates author_id=%s profile_pages=%s candidates=%s reasons=%s",
             author.author_id,
@@ -1186,7 +1389,78 @@ class WebSearchClient:
             len(results),
             ",".join(sorted(reason_tags)) if reason_tags else "ok",
         )
-        return results
+        return results, reason_tags, {"provider": "legacy", "profile_pages": len(profile_pages)}
+
+    def _merge_candidates(self, left: list[SearchCandidate], right: list[SearchCandidate]) -> list[SearchCandidate]:
+        merged: list[SearchCandidate] = []
+        seen: set[str] = set()
+        for item in left + right:
+            key = f"{item.source_url}|{item.image_url}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= self._max_results:
+                break
+        return merged
+
+    def search_image_candidates(self, author: AuthorRecord) -> list[SearchCandidate]:
+        mode = self._search_provider_mode
+        reason_tags: set[str] = set()
+        metadata: dict[str, Any] = {"provider_mode": mode}
+        final_candidates: list[SearchCandidate] = []
+        fallback_triggered = False
+
+        logger.info("websearch_provider_mode author_id=%s provider_mode=%s", author.author_id, mode)
+
+        if mode == "legacy":
+            result = self._legacy_provider.search(author)
+            final_candidates = result.candidates
+            reason_tags.update(result.reason_tags)
+            metadata.update(result.metadata)
+        elif mode == "qwen":
+            qwen_result = self._qwen_provider.search(author) if self._qwen_provider else ProviderSearchResult([], {"qwen_provider_unavailable"}, {})
+            final_candidates = qwen_result.candidates
+            reason_tags.update(qwen_result.reason_tags)
+            metadata.update(qwen_result.metadata)
+        else:
+            qwen_result = self._qwen_provider.search(author) if self._qwen_provider else ProviderSearchResult([], {"qwen_provider_unavailable"}, {})
+            reason_tags.update(qwen_result.reason_tags)
+            metadata.update({f"qwen_{k}": v for k, v in qwen_result.metadata.items()})
+            final_candidates = list(qwen_result.candidates)
+            if len(final_candidates) < self._max_results:
+                fallback_triggered = True
+                reason_tags.add("fallback_to_legacy")
+                legacy_result = self._legacy_provider.search(author)
+                reason_tags.update(legacy_result.reason_tags)
+                metadata.update({f"legacy_{k}": v for k, v in legacy_result.metadata.items()})
+                final_candidates = self._merge_candidates(final_candidates, legacy_result.candidates)
+
+        if not final_candidates:
+            if mode in {"qwen", "hybrid"} and "qwen_no_profile_pages" in reason_tags:
+                reason_tags.add("qwen_web_search_failed")
+            if mode in {"qwen", "hybrid"} and "qwen_no_image_candidates" in reason_tags:
+                reason_tags.add("qwen_t2i_search_failed")
+            if mode == "hybrid" and "legacy_no_candidates" in reason_tags:
+                reason_tags.add("legacy_no_candidates")
+
+        metadata["fallback_triggered"] = fallback_triggered
+        metadata["final_candidate_count"] = len(final_candidates)
+        self._last_search_diagnostics = {
+            "provider_mode": mode,
+            "reason_tags": sorted(reason_tags),
+            "fallback_triggered": fallback_triggered,
+            **metadata,
+        }
+        logger.info(
+            "websearch_provider_summary author_id=%s provider_mode=%s fallback=%s final_candidates=%s reasons=%s",
+            author.author_id,
+            mode,
+            fallback_triggered,
+            len(final_candidates),
+            ",".join(sorted(reason_tags)) if reason_tags else "ok",
+        )
+        return final_candidates
 
     def download_image(self, url: str) -> tuple[bytes, str]:
         resp = self._http.request("GET", url, stream=False)

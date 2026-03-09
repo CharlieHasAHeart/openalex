@@ -105,6 +105,13 @@ class PipelineConfig:
     llm_model: str
     llm_timeout_seconds: int
     websearch_max_results: int
+    search_provider: str
+    qwen_model: str
+    qwen_enable_web_search: bool
+    qwen_enable_t2i_search: bool
+    qwen_max_candidates: int
+    qwen_min_confidence: float
+    qwen_timeout_seconds: int
     person_page_query_max: int
     person_page_per_query_results: int
     person_page_max_fetch: int
@@ -161,6 +168,13 @@ class PipelineConfig:
             llm_model=_get_env("LLM_MODEL", "gpt-4o-mini"),
             llm_timeout_seconds=int(_get_env("LLM_TIMEOUT_SECONDS", "30")),
             websearch_max_results=int(_get_env("WEBSEARCH_MAX_RESULTS", "8")),
+            search_provider=_get_env("SEARCH_PROVIDER", "hybrid"),
+            qwen_model=_get_env("QWEN_MODEL", "qwen3.5-plus"),
+            qwen_enable_web_search=_bool_env("QWEN_ENABLE_WEB_SEARCH", True),
+            qwen_enable_t2i_search=_bool_env("QWEN_ENABLE_T2I_SEARCH", True),
+            qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "8")),
+            qwen_min_confidence=float(_get_env("QWEN_MIN_CONFIDENCE", "0.55")),
+            qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "30")),
             person_page_query_max=int(_get_env("PERSON_PAGE_QUERY_MAX", "7")),
             person_page_per_query_results=int(_get_env("PERSON_PAGE_PER_QUERY_RESULTS", "5")),
             person_page_max_fetch=int(_get_env("PERSON_PAGE_MAX_FETCH", "12")),
