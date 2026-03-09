@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
 import logging
 import threading
 import time
@@ -24,6 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=1, help="Worker threads for concurrent processing. 1 means serial.")
     parser.add_argument("--progress-every", type=int, default=50, help="Emit progress log every N authors. 0 to disable intermediate progress logs.")
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--export-review-summaries", action="store_true", help="Export recent review summaries and evaluation stats, then exit.")
+    parser.add_argument("--review-summary-limit", type=int, default=200, help="How many recent decision summaries to export.")
+    parser.add_argument("--review-recommendation", default="", help="Optional filter for review recommendation (auto_accept/needs_review/ambiguous).")
+    parser.add_argument("--sample-review", action="store_true", help="Also output stratified review samples by recommendation.")
+    parser.add_argument("--sample-per-group", type=int, default=20, help="Sample size per recommendation group.")
     return parser.parse_args()
 
 
@@ -203,6 +209,7 @@ def main() -> int:
     logger = logging.getLogger(__name__)
 
     from avatar_pipeline.config import PipelineConfig, load_dotenv
+    from avatar_pipeline.evaluation import format_review_export, sample_decisions, summarize_decisions
     from avatar_pipeline.http import RateLimiter
     from avatar_pipeline.pg_repository import PgRepository
 
@@ -225,6 +232,28 @@ def main() -> int:
     run_id: str | None = None
     if workers == 1:
         runner, runner_repository = _create_runner(config, limiter, run_id=run_id)
+
+    if args.export_review_summaries:
+        with PgRepository(
+            host=config.pghost,
+            port=config.pgport,
+            database=config.pgdatabase,
+            user=config.pguser,
+            password=config.pgpassword,
+            sslmode=config.pgsslmode,
+        ) as repository:
+            rows = repository.list_recent_decision_summaries(
+                limit=max(1, args.review_summary_limit),
+                recommendation=args.review_recommendation.strip() or None,
+            )
+        formatted = format_review_export(rows)
+        summary = summarize_decisions(formatted)
+        print(json.dumps({"summary": summary}, ensure_ascii=False, indent=2))
+        print(json.dumps({"rows": formatted}, ensure_ascii=False, indent=2))
+        if args.sample_review:
+            sampled = sample_decisions(formatted, per_group=max(1, args.sample_per_group))
+            print(json.dumps({"sampled": sampled}, ensure_ascii=False, indent=2))
+        return 0
 
     try:
         with PgRepository(

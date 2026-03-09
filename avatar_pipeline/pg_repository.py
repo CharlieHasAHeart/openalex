@@ -636,7 +636,11 @@ class PgRepository(AbstractContextManager["PgRepository"]):
 
         self._run_with_reconnect(_op)
 
-    def list_recent_decision_summaries(self, limit: int = 50) -> list[dict[str, Any]]:
+    def list_recent_decision_summaries(
+        self,
+        limit: int = 50,
+        recommendation: str | None = None,
+    ) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 1000))
         sql = """
         SELECT
@@ -659,13 +663,20 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             ORDER BY d1.created_at DESC, d1.id DESC
             LIMIT 1
         ) d ON true
+        """
+        params: list[Any] = []
+        if recommendation and recommendation.strip():
+            sql += " WHERE d.evidence ->> 'review_recommendation' = %s"
+            params.append(recommendation.strip())
+        sql += """
         ORDER BY COALESCE(ar.finished_at, ar.created_at) DESC, ar.id DESC
         LIMIT %s
         """
+        params.append(safe_limit)
 
         def _op():
             with self._conn.cursor() as cur:
-                cur.execute(sql, (safe_limit,))
+                cur.execute(sql, tuple(params))
                 return cur.fetchall() or []
 
         return self._run_with_reconnect(_op)
