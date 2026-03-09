@@ -24,12 +24,14 @@ class PipelineRunner:
         llm_matcher: LlmMatcher,
         oss_uploader: OssUploader,
         pg_repository: PgRepository,
+        run_id: str | None = None,
     ) -> None:
         self._config = config
         self._web_search = web_search_client
         self._matcher = llm_matcher
         self._oss = oss_uploader
         self._repo = pg_repository
+        self._run_id = run_id
         self._stats: Counter[str] = Counter()
 
     @property
@@ -39,8 +41,9 @@ class PipelineRunner:
     def run_for_author_seed(self, author: AuthorRecord) -> str:
         try:
             existing_avatar = self._repo.get_author_avatar_record(author.author_id)
-            if existing_avatar and self._should_skip_by_db_state(existing_avatar):
-                status = existing_avatar.get("status") or "unknown"
+            existing_state = self._repo.get_avatar_state(author.author_id)
+            if existing_state and self._should_skip_by_db_state(existing_state):
+                status = existing_state.get("status") or "unknown"
                 stat_key = f"skipped_recent_{status}"
                 self._stats[stat_key] += 1
                 return stat_key
@@ -73,30 +76,46 @@ class PipelineRunner:
                 error_message=str(exc),
             )
 
-        persist_error: str | None = None
-        try:
-            self._repo.upsert_result(result)
-        except Exception as exc:
-            persist_error = str(exc)
-            if result.status != "error":
-                result = PipelineResult(
-                    author_id=author.author_id,
-                    status="error",
-                    error_message=f"persist_failed:{persist_error}",
-                    wikidata_qid=result.wikidata_qid,
-                    commons_file=result.commons_file,
+        run_persist_error: str | None = None
+        if self._run_id:
+            try:
+                self._repo.insert_author_run(
+                    run_id=self._run_id,
+                    author_id=int(author.author_id),
+                    status=result.status,
+                    error_code=None,
+                    error_message=result.error_message,
+                    finished_at=datetime.now(timezone.utc),
                 )
-            logger.error(
-                "pipeline_persist_failed author_id=%s orcid=%s status_before=%s error_message=%s",
-                author.author_id,
-                author.orcid,
-                result.status,
-                persist_error,
-            )
+            except Exception as exc:
+                run_persist_error = str(exc)
+                logger.error(
+                    "pipeline_author_run_persist_failed run_id=%s author_id=%s status=%s error_message=%s",
+                    self._run_id,
+                    author.author_id,
+                    result.status,
+                    run_persist_error,
+                )
+
+        persist_error: str | None = None
+        if result.status == "ok":
+            try:
+                self._repo.upsert_result(result)
+            except Exception as exc:
+                persist_error = str(exc)
+                logger.error(
+                    "pipeline_persist_failed run_id=%s author_id=%s orcid=%s status_before=%s error_message=%s",
+                    self._run_id,
+                    author.author_id,
+                    author.orcid,
+                    result.status,
+                    persist_error,
+                )
 
         self._stats[result.status] += 1
         logger.info(
-            "pipeline_result author_id=%s orcid=%s status=%s qid=%s commons_file=%s error_message=%s persist_error=%s",
+            "pipeline_result run_id=%s author_id=%s orcid=%s status=%s qid=%s commons_file=%s error_message=%s persist_error=%s run_persist_error=%s",
+            self._run_id,
             author.author_id,
             author.orcid,
             result.status,
@@ -104,6 +123,7 @@ class PipelineRunner:
             result.commons_file,
             result.error_message,
             persist_error,
+            run_persist_error,
         )
         return result
 

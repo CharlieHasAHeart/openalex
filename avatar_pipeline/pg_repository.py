@@ -91,6 +91,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
     def get_avatar_state(self, author_id: str) -> dict[str, Any] | None:
         sql = """
         SELECT
+            run_id,
             author_id,
             status,
             COALESCE(finished_at, created_at) AS updated_at,
