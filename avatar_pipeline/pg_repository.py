@@ -690,6 +690,56 @@ class PgRepository(AbstractContextManager["PgRepository"]):
 
         return self._run_with_reconnect(_op)
 
+    def list_latest_decision_summaries_by_author_ids(
+        self,
+        author_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        normalized_ids = [str(item).strip() for item in author_ids if str(item).strip()]
+        if not normalized_ids:
+            return []
+
+        sql = """
+        WITH latest_author_runs AS (
+            SELECT
+                ar.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ar.author_id
+                    ORDER BY COALESCE(ar.finished_at, ar.created_at) DESC, ar.id DESC
+                ) AS rn
+            FROM openalex.avatar_pipeline_author_runs ar
+            WHERE ar.author_id::text = ANY(%s)
+        )
+        SELECT
+            ar.author_id,
+            ar.status,
+            ar.selected_candidate_id,
+            ar.final_score AS acceptance_score,
+            COALESCE(ar.finished_at, ar.created_at) AS updated_at,
+            (d.evidence ->> 'decision_mode') AS decision_mode,
+            COALESCE((d.evidence ->> 'fallback_used')::boolean, false) AS fallback_used,
+            d.evidence ->> 'review_recommendation' AS review_recommendation,
+            d.evidence -> 'review_risk_flags' AS review_risk_flags,
+            d.evidence ->> 'review_summary' AS review_summary
+        FROM latest_author_runs ar
+        LEFT JOIN LATERAL (
+            SELECT d1.evidence
+            FROM openalex.avatar_candidate_decisions d1
+            WHERE d1.run_id = ar.run_id
+              AND d1.author_id = ar.author_id
+            ORDER BY d1.created_at DESC, d1.id DESC
+            LIMIT 1
+        ) d ON true
+        WHERE ar.rn = 1
+        ORDER BY ar.author_id
+        """
+
+        def _op():
+            with self._conn.cursor() as cur:
+                cur.execute(sql, (normalized_ids,))
+                return cur.fetchall() or []
+
+        return self._run_with_reconnect(_op)
+
     def list_author_sampling_features(
         self,
         limit: int | None = None,

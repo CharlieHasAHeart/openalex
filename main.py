@@ -241,6 +241,7 @@ def main() -> int:
     from avatar_pipeline.preannotation import (
         build_preannotation_rows,
         load_benchmark_package,
+        merge_package_with_decision_summaries,
         summarize_preannotations,
         write_preannotation_file,
         write_preannotation_review_sheet,
@@ -270,12 +271,6 @@ def main() -> int:
     start_monotonic = time.monotonic()
     stats: Counter[str] = Counter()
     done = 0
-
-    runner = None
-    runner_repository = None
-    run_id: str | None = None
-    if workers == 1:
-        runner, runner_repository = _create_runner(config, limiter, run_id=run_id)
 
     if args.export_review_summaries:
         with PgRepository(
@@ -400,7 +395,18 @@ def main() -> int:
             logger.error("benchmark_package_file_required")
             return 2
         package_rows = load_benchmark_package(args.benchmark_package_file.strip())
-        pre_rows = build_preannotation_rows(package_rows)
+        author_ids = [str(row.get("author_id")) for row in package_rows if row.get("author_id") is not None]
+        with PgRepository(
+            host=config.pghost,
+            port=config.pgport,
+            database=config.pgdatabase,
+            user=config.pguser,
+            password=config.pgpassword,
+            sslmode=config.pgsslmode,
+        ) as repository:
+            decision_rows = repository.list_latest_decision_summaries_by_author_ids(author_ids)
+        merged_rows = merge_package_with_decision_summaries(package_rows, decision_rows)
+        pre_rows = build_preannotation_rows(merged_rows)
         output_dir = args.preannotation_output_dir.strip() or "reports/benchmark_packages"
         base_name = Path(args.benchmark_package_file.strip()).stem.replace("_package", "")
         pre_path = str(Path(output_dir) / f"{base_name}_preannotations.json")
@@ -420,6 +426,12 @@ def main() -> int:
             )
         )
         return 0
+
+    runner = None
+    runner_repository = None
+    run_id: str | None = None
+    if workers == 1:
+        runner, runner_repository = _create_runner(config, limiter, run_id=run_id)
 
     try:
         with PgRepository(

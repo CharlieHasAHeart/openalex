@@ -64,12 +64,23 @@ def suggest_prelabel(row: dict[str, Any]) -> dict[str, Any]:
     acceptance_score = row.get("acceptance_score")
     fallback_used = bool(row.get("fallback_used"))
     decision_mode = str(row.get("decision_mode") or "").strip()
+    has_pipeline_evidence = any(
+        value not in (None, "", [])
+        for value in (
+            review_recommendation,
+            review_summary,
+            review_risk_flags,
+            decision_mode,
+            acceptance_score,
+            row.get("status"),
+        )
+    )
 
     suggested_label = "uncertain"
-    suggested_reason = "insufficient_or_risky_signal"
+    suggested_reason = "no_pipeline_evidence" if not has_pipeline_evidence else "insufficient_or_risky_signal"
     prelabel_confidence = 0.4
     needs_human_review = True
-    prelabel_source = "low_confidence_fallback"
+    prelabel_source = "no_pipeline_evidence" if not has_pipeline_evidence else "low_confidence_fallback"
 
     high_risk = any(flag in HIGH_RISK_FLAGS for flag in review_risk_flags)
 
@@ -105,6 +116,7 @@ def suggest_prelabel(row: dict[str, Any]) -> dict[str, Any]:
         "decision_mode": decision_mode or None,
         "acceptance_score": acceptance_score,
         "fallback_used": fallback_used,
+        "has_pipeline_evidence": has_pipeline_evidence,
     }
 
 
@@ -116,6 +128,37 @@ def build_preannotation_rows(package_rows: Iterable[dict[str, Any]]) -> list[dic
         enriched.update(suggestion)
         rows.append(enriched)
     return rows
+
+
+def merge_package_with_decision_summaries(
+    package_rows: Iterable[dict[str, Any]],
+    decision_rows: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    decision_map = {
+        str(row.get("author_id")): row
+        for row in decision_rows
+        if row.get("author_id") is not None
+    }
+    merged: list[dict[str, Any]] = []
+    for row in package_rows:
+        author_id = row.get("author_id")
+        enriched = dict(row)
+        if author_id is not None:
+            decision = decision_map.get(str(author_id))
+            if decision:
+                enriched.update(
+                    {
+                        "status": decision.get("status"),
+                        "decision_mode": decision.get("decision_mode"),
+                        "acceptance_score": decision.get("acceptance_score"),
+                        "fallback_used": bool(decision.get("fallback_used")),
+                        "review_recommendation": decision.get("review_recommendation"),
+                        "review_summary": decision.get("review_summary"),
+                        "review_risk_flags": _as_list(decision.get("review_risk_flags")),
+                    }
+                )
+        merged.append(enriched)
+    return merged
 
 
 def write_preannotation_file(rows: Iterable[dict[str, Any]], output_path: str) -> None:
@@ -132,6 +175,7 @@ def write_preannotation_review_sheet(rows: Iterable[dict[str, Any]], output_path
         "display_name",
         "dominant_domain",
         "sampling_stratum",
+        "has_pipeline_evidence",
         "review_recommendation",
         "review_summary",
         "review_risk_flags",
@@ -156,6 +200,7 @@ def summarize_preannotations(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     total = 0
     label_counter: Counter[str] = Counter()
     needs_review_count = 0
+    evidence_count = 0
     by_recommendation: dict[str, Counter[str]] = defaultdict(Counter)
 
     for row in rows:
@@ -164,6 +209,8 @@ def summarize_preannotations(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         label_counter[label] += 1
         if row.get("needs_human_review"):
             needs_review_count += 1
+        if row.get("has_pipeline_evidence"):
+            evidence_count += 1
         rec = str(row.get("review_recommendation") or "unknown")
         by_recommendation[rec][label] += 1
 
@@ -172,5 +219,7 @@ def summarize_preannotations(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "suggested_label_distribution": dict(label_counter),
         "needs_human_review_count": needs_review_count,
         "needs_human_review_ratio": round(needs_review_count / total, 4) if total else 0.0,
+        "pipeline_evidence_count": evidence_count,
+        "pipeline_evidence_ratio": round(evidence_count / total, 4) if total else 0.0,
         "by_review_recommendation": {k: dict(v) for k, v in by_recommendation.items()},
     }
