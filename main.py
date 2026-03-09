@@ -39,6 +39,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frozen-eval-size", type=int, default=2000, help="Frozen eval set size.")
     parser.add_argument("--shadow-size", type=int, default=10000, help="Shadow set size.")
     parser.add_argument("--sampling-seed", type=int, default=42, help="Random seed for stratified sampling.")
+    parser.add_argument("--build-benchmark-package", action="store_true", help="Build annotation-ready benchmark package from a sampling set.")
+    parser.add_argument("--sampling-set-file", default="", help="Path to sampling set JSON file.")
+    parser.add_argument("--benchmark-package-name", default="development", help="Package name prefix for outputs.")
+    parser.add_argument("--package-output-dir", default="reports/benchmark_packages", help="Output directory for benchmark package artifacts.")
+    parser.add_argument("--validate-annotations-file", default="", help="Validate annotation JSONL file for a benchmark package.")
     return parser.parse_args()
 
 
@@ -224,6 +229,11 @@ def main() -> int:
         load_annotations,
         load_benchmark_authors,
     )
+    from avatar_pipeline.benchmark_package import (
+        build_benchmark_package,
+        load_sampling_set,
+        validate_annotation_file,
+    )
     from avatar_pipeline.evaluation import format_review_export, sample_decisions, summarize_decisions
     from avatar_pipeline.http import RateLimiter
     from avatar_pipeline.pg_repository import PgRepository
@@ -347,6 +357,31 @@ def main() -> int:
         sets = build_sampling_sets(labeled_rows, sampling_config)
         output_info = write_sampling_outputs("reports/sampling", sets)
         print(json.dumps(output_info, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.build_benchmark_package:
+        if not args.sampling_set_file.strip():
+            logger.error("sampling_set_file_required")
+            return 2
+        package_info = build_benchmark_package(
+            sampling_set_path=args.sampling_set_file.strip(),
+            package_name=args.benchmark_package_name.strip() or "development",
+            output_dir=args.package_output_dir.strip() or "reports/benchmark_packages",
+        )
+        print(json.dumps(package_info, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.validate_annotations_file:
+        expected_ids: set[str] | None = None
+        if args.sampling_set_file.strip():
+            sampling_rows = load_sampling_set(args.sampling_set_file.strip())
+            expected_ids = {str(row.get("author_id")) for row in sampling_rows if row.get("author_id") is not None}
+        try:
+            report = validate_annotation_file(args.validate_annotations_file.strip(), expected_author_ids=expected_ids)
+        except Exception as exc:
+            logger.exception("annotation_validation_failed error=%s", exc)
+            return 2
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
 
     try:
