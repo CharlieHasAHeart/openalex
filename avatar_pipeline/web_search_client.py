@@ -201,6 +201,19 @@ class WebSearchClient:
         kept = sorted(deduped.values(), key=self._profile_page_score, reverse=True)
         return kept[:6]
 
+    def _profile_pages_for_image_stage(self, profile_pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        ranked = sorted(profile_pages, key=self._profile_page_score, reverse=True)
+        selected: list[dict[str, Any]] = []
+        seen_domains: set[str] = set()
+        for row in ranked:
+            domain = self._profile_domain(str(row.get("url") or ""))
+            if domain and domain not in seen_domains:
+                selected.append(row)
+                seen_domains.add(domain)
+            if len(selected) >= 3:
+                break
+        return selected or ranked[:3]
+
     def _link_candidate_to_profiles(self, candidate: SearchCandidate, profile_pages: list[dict[str, Any]]) -> SearchCandidate:
         source_domain = (urlparse(candidate.source_url).hostname or "").lower()
         title_blob = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.source_url]).lower()
@@ -276,7 +289,9 @@ class WebSearchClient:
             )
 
         logger.info("qwen_two_stage_profile_done author_id=%s trusted_profile_pages=%s", author.author_id, len(trusted_profile_pages))
-        stage2 = self._qwen_tools.search_images_from_profiles(author, trusted_profile_pages, max_candidates=self._max_candidates)
+        image_stage_profile_pages = self._profile_pages_for_image_stage(trusted_profile_pages)
+        logger.info("qwen_two_stage_image_input author_id=%s profile_pages_for_stage2=%s", author.author_id, len(image_stage_profile_pages))
+        stage2 = self._qwen_tools.search_images_from_profiles(author, image_stage_profile_pages, max_candidates=self._max_candidates)
 
         all_rows = stage2.filtered_candidates or stage2.image_candidates
         raw_candidates: list[SearchCandidate] = []

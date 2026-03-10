@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from requests import HTTPError
+from requests import ReadTimeout
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
@@ -51,6 +52,7 @@ class QwenToolsClient:
         self._enable_t2i_search = enable_t2i_search
         self._min_confidence = max(0.0, min(1.0, min_confidence))
         self._response_path = response_path if response_path.startswith("/") else f"/{response_path}"
+        self._image_stage_timeout_seconds = max(self._timeout_seconds, 90)
 
     @property
     def model(self) -> str:
@@ -265,12 +267,18 @@ class QwenToolsClient:
             schema_issue_count=schema_issue_count,
         )
 
-    def _post_responses(self, payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def _post_responses(self, payload: dict[str, Any], timeout: int | None = None) -> tuple[dict[str, Any], str]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        resp = self._http.request("POST", self._response_url(), headers=headers, json=payload, timeout=self._timeout_seconds)
+        resp = self._http.request(
+            "POST",
+            self._response_url(),
+            headers=headers,
+            json=payload,
+            timeout=timeout or self._timeout_seconds,
+        )
         return resp.json(), "json_object"
 
     def _run_stage(self, *, author: AuthorRecord, prompt: str, tools: list[dict[str, Any]], stage_name: str) -> QwenSearchResult:
@@ -282,8 +290,9 @@ class QwenToolsClient:
             "response_format": self._build_response_format(),
         }
         response_format_mode = "json_object"
+        stage_timeout = self._image_stage_timeout_seconds if stage_name == "qwen_image_stage" else self._timeout_seconds
         try:
-            data, _ = self._post_responses(payload)
+            data, _ = self._post_responses(payload, timeout=stage_timeout)
         except HTTPError as exc:
             response = getattr(exc, "response", None)
             status_code = response.status_code if response is not None else None
@@ -292,14 +301,28 @@ class QwenToolsClient:
                 fallback_payload = dict(payload)
                 fallback_payload.pop("response_format", None)
                 try:
-                    data, _ = self._post_responses(fallback_payload)
+                    data, _ = self._post_responses(fallback_payload, timeout=stage_timeout)
                     response_format_mode = "prompt_only_fallback"
                 except Exception as fallback_exc:
                     logger.warning("%s_failed author_id=%s error_message=%s", stage_name, author.author_id, str(fallback_exc))
-                    return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_request_failed", raw_content=response_text, response_text=response_text, response_format_mode=response_format_mode)
+                    failure_reason = f"{stage_name}_request_failed"
+                    if isinstance(fallback_exc, ReadTimeout):
+                        failure_reason = f"{stage_name}_request_timeout"
+                    return QwenSearchResult([], [], [], failure_reason=failure_reason, raw_content=response_text, response_text=response_text, response_format_mode=response_format_mode)
             else:
                 logger.warning("%s_http_error author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
                 return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_http_error", raw_content=response_text, response_text=response_text, response_format_mode=response_format_mode)
+        except ReadTimeout as exc:
+            logger.warning("%s_timeout author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
+            return QwenSearchResult(
+                [],
+                [],
+                [],
+                failure_reason=f"{stage_name}_request_timeout",
+                raw_content=str(exc)[:4000],
+                response_text=str(exc)[:4000],
+                response_format_mode=response_format_mode,
+            )
         except Exception as exc:
             logger.warning("%s_request_failed author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
             return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_request_failed", response_format_mode=response_format_mode)
