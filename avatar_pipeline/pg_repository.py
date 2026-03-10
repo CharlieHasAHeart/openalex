@@ -26,6 +26,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         )
         self._conn = self._connect()
         self._authors_analysis_table_and_id_col: tuple[str, str] | None = None
+        self._authors_analysis_columns: list[str] | None = None
 
     def _connect(self):
         conn = psycopg.connect(self._conninfo, row_factory=dict_row)
@@ -76,11 +77,30 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                 id_col = "author_id" if "author_id" in cols else ("id" if "id" in cols else "")
                 if not id_col:
                     raise RuntimeError(f"{table} must contain column author_id or id")
+                self._authors_analysis_columns = cols
                 self._authors_analysis_table_and_id_col = (table, id_col)
                 return self._authors_analysis_table_and_id_col
             except psycopg.errors.UndefinedTable:
                 continue
         raise RuntimeError("Missing table authors_analysis (or openalex.authors_analysis / public.authors_analysis)")
+
+    def _authors_analysis_select_clause(self, id_col: str) -> str:
+        cols = self._authors_analysis_columns or []
+        optional_cols = [
+            "orcid",
+            "display_name",
+            "x_concepts",
+            "concepts",
+            "last_known_institutions",
+            "affiliations",
+        ]
+        select_parts = [f"{id_col} AS author_id"]
+        for col in optional_cols:
+            if col in cols:
+                select_parts.append(col)
+            else:
+                select_parts.append(f"NULL AS {col}")
+        return ",\n            ".join(select_parts)
 
     def _row_to_author_record(self, row: dict[str, Any], id_col: str) -> AuthorRecord | None:
         raw_id = row.get("author_id") or row.get(id_col)
@@ -115,15 +135,10 @@ class PgRepository(AbstractContextManager["PgRepository"]):
 
     def list_author_records_from_authors_analysis(self, limit: int | None = None, offset: int = 0) -> list[AuthorRecord]:
         table, id_col = self._resolve_authors_analysis_table_and_id_col()
+        select_clause = self._authors_analysis_select_clause(id_col)
         sql = f"""
         SELECT
-            {id_col} AS author_id,
-            orcid,
-            display_name,
-            x_concepts,
-            concepts,
-            last_known_institutions,
-            affiliations
+            {select_clause}
         FROM {table}
         ORDER BY {id_col}
         """
@@ -153,15 +168,10 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         if not normalized_ids:
             return []
         table, id_col = self._resolve_authors_analysis_table_and_id_col()
+        select_clause = self._authors_analysis_select_clause(id_col)
         sql = f"""
         SELECT
-            {id_col} AS author_id,
-            orcid,
-            display_name,
-            x_concepts,
-            concepts,
-            last_known_institutions,
-            affiliations
+            {select_clause}
         FROM {table}
         WHERE {id_col}::text = ANY(%s)
         """
