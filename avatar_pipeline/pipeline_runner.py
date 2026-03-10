@@ -342,7 +342,9 @@ class PipelineRunner:
         ).lower()
         if any(token in image_blob for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
             score -= 2.5
-        if any(token in image_blob for token in ("portrait", "headshot", "profile photo", "basic_photo_1")):
+        if any(token in image_blob for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "loading", "spinner")):
+            score -= 3.0
+        if any(token in image_blob for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
             score += 1.0
 
         candidate.pre_rank_score = score

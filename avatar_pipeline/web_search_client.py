@@ -171,12 +171,20 @@ class WebSearchClient:
         score = confidence
         if "orcid.org" in domain:
             score += 0.3
+        if "researchmap.jp" in domain:
+            score += 0.22
+        if "nrid.nii.ac.jp" in domain or "kaken.nii.ac.jp" in domain:
+            score += 0.1
         if domain.endswith(".edu") or ".edu." in domain:
             score += 0.25
         if source_type in {"institution_profile", "institution_directory"}:
             score += 0.2
+        if any(token in source_type for token in ("researcher database", "researcher_profile_platform", "researcher_profile", "government researcher database")):
+            score += 0.12
         if any(token in url.lower() for token in ("/faculty/", "/profile/", "/staff/", "/person/", "/people/", "/member/", "/bio/")):
             score += 0.2
+        if "researchmap.jp" in domain and any(token in url.lower() for token in ("/avatar", "/photo", "funguy", "?lang=")):
+            score += 0.08
         if any(token in (title + " " + snippet + " " + reason) for token in ("faculty", "staff", "profile", "researcher", "professor", "orcid")):
             score += 0.1
         if any(token in url.lower() for token in ("/news", "/publication", "/paper", "/event", "/article")):
@@ -253,17 +261,20 @@ class WebSearchClient:
             if not src_match:
                 continue
             raw_src = unescape(src_match.group(1)).strip()
-            if not raw_src or raw_src.startswith("data:"):
+            if not raw_src or raw_src.startswith("data:") or "{{" in raw_src or "}}" in raw_src:
                 continue
             image_url = urljoin(source_url, raw_src)
             lower_src = image_url.lower()
-            if any(token in lower_src for token in ("logo", "banner", "icon", "sprite", "favicon", "thumbnail", "thumb")):
+            if any(token in lower_src for token in ("loading.", "spinner", "logo", "banner", "icon", "sprite", "favicon", "thumbnail", "thumb", "/bnr_", "bnr-")):
                 continue
             alt_match = re.search(r'alt=["\']([^"\']*)["\']', tag, re.IGNORECASE)
             image_alt = self._clean_text(alt_match.group(1)) if alt_match else None
             start = max(match.start() - 250, 0)
             end = min(match.end() + 250, len(html))
             nearby_text = self._clean_text(html[start:end])
+            tag_blob = " ".join(filter(None, [tag, image_alt or "", nearby_text or ""])).lower()
+            if any(token in tag_blob for token in ("bnr_", "banner", "site-title", "loading", "spinner", "footer", "navbar", "nav-", "breadcrumb")):
+                continue
             candidate = SearchCandidate(
                 image_url=image_url,
                 source_url=source_url,
@@ -587,7 +598,9 @@ class WebSearchClient:
             score -= 2.0
         if any(token in text for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
             score -= 2.5
-        if any(token in text for token in ("portrait", "headshot", "profile photo", "basic_photo_1")):
+        if any(token in text for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "loading", "spinner")):
+            score -= 3.0
+        if any(token in text for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
             score += 1.0
         if candidate.merged_count and candidate.merged_count > 1:
             score += min((candidate.merged_count - 1) * 0.2, 1.0)
