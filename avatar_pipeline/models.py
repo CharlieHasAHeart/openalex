@@ -10,7 +10,10 @@ class AuthorRecord:
     display_name: str
     orcid_url: str | None
     institution_name: str | None = None
-    concept_names: list[str] | None = None
+    institution_names: list[str] | None = None
+    institution_country_codes: list[str] | None = None
+    affiliations: Any = None
+    last_known_institutions: Any = None
     profile: dict[str, Any] | None = None
 
     @property
@@ -44,6 +47,7 @@ class PipelineResult:
     oss_object_key: str | None = None
     oss_url: str | None = None
     selected_candidate: dict[str, Any] | None = None
+    ranked_candidates: list[dict[str, Any]] = field(default_factory=list)
     profile_pages: list[dict[str, Any]] = field(default_factory=list)
     image_candidates: list[dict[str, Any]] = field(default_factory=list)
     filtered_candidates: list[dict[str, Any]] = field(default_factory=list)

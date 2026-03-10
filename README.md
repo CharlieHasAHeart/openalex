@@ -2,13 +2,16 @@
 
 这个项目现在只保留一条极简头像获取主流程：
 
-`load author -> qwen web_search 找相关网页 -> 本地解析网页 HTML 抽图 -> 本地筛选/校验/聚类/重排 -> 选图 -> upload oss -> upsert public.authors_avatars -> write local run record`
+`load author -> qwen web_search 找相关网页 -> 本地解析网页 HTML 抽图 -> 主链路失败时 qwen web_search_image fallback -> 本地筛选/校验/聚类/重排 -> 选图 -> LLM 头像复核 -> upload oss -> upsert public.authors_avatars -> write local run record`
 
 ## 当前架构
 
 - 搜索与候选发现只使用 `qwen3.5-plus Responses API`
 - Qwen 只使用 `web_search` 返回相关网页证据
 - `image_candidates` / `filtered_candidates` 由本地代码生成，不再依赖 Qwen 生成图片候选
+- 当主链路 `web_search -> HTML 抽图` 失败时，会触发 `web_search_image` 作为高门槛 fallback
+- `web_search_image` 结果不会直接采用，仍然要经过本地校验、去重和重排
+- 最终候选在上传前会送回 LLM 复核，若判定不是头像则保守失败
 - 保留 Qwen 输出 schema 校验，固定输出字段：
   - `profile_pages`
   - `image_candidates`
@@ -25,6 +28,31 @@
   - `public.authors_avatars` 查询
   - `public.authors_avatars` upsert
 - 运行时审计数据全部写本地 `runs/`
+
+## 判断逻辑流程图
+
+```mermaid
+flowchart TD
+    A[Load author from authors_analysis] --> B[Qwen web_search: profile_pages]
+    B --> C{Trusted profile_pages?}
+    C -- No --> Z1[Fail: qwen_no_trusted_profile_pages]
+    C -- Yes --> D[Fetch HTML and extract img candidates]
+    D --> E{HTML candidates strong enough?}
+    E -- Yes --> G[Local enrich + metadata check + dedupe + rerank]
+    E -- No --> F[Qwen web_search_image fallback]
+    F --> F2{Fallback candidates pass local strict checks?}
+    F2 -- No --> Z2[Fail: no_strong_candidate]
+    F2 -- Yes --> G
+    G --> H[Select best candidate]
+    H --> I{Local image valid?}
+    I -- No --> Z3[Fail: invalid_image]
+    I -- Yes --> J[LLM avatar review]
+    J --> K{LLM says avatar?}
+    K -- No --> Z4[Fail: llm_avatar_review_rejected]
+    K -- Yes --> L[Upload OSS]
+    L --> M[Upsert public.authors_avatars]
+    M --> N[Write runs summary/author/failures]
+```
 
 ## 目录
 
@@ -72,7 +100,7 @@ Qwen：
 通用：
 
 - `ALLOWED_MIME`，默认 `image/jpeg,image/png,image/webp`
-- `MIN_IMAGE_EDGE_PX`，默认 `200`
+- `MIN_IMAGE_EDGE_PX`，默认 `96`
 - `REQUEST_TIMEOUT_SECONDS`，默认 `20`
 - `MAX_RETRIES`，默认 `3`
 - `GLOBAL_QPS_LIMIT`，默认 `2`

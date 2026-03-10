@@ -99,7 +99,7 @@ class PipelineConfig:
             aliyun_oss_key_prefix=_get_env("ALIYUN_OSS_KEY_PREFIX", "openalex"),
             aliyun_oss_cache_control=os.getenv("ALIYUN_OSS_CACHE_CONTROL"),
             allowed_mime=allowed_mime,
-            min_image_edge_px=int(_get_env("MIN_IMAGE_EDGE_PX", "200")),
+            min_image_edge_px=int(_get_env("MIN_IMAGE_EDGE_PX", "96")),
             request_timeout_seconds=int(_get_env("REQUEST_TIMEOUT_SECONDS", "20")),
             max_retries=int(_get_env("MAX_RETRIES", "3")),
             global_qps_limit=float(_get_env("GLOBAL_QPS_LIMIT", "2")),

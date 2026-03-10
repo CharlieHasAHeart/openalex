@@ -31,6 +31,25 @@ class QwenSearchResult:
     schema_issue_count: int = 0
 
 
+@dataclass(slots=True)
+class QwenImageSearchResult:
+    image_results: list[dict[str, Any]]
+    failure_reason: str | None = None
+    raw_content: str | None = None
+    response_text: str | None = None
+
+
+@dataclass(slots=True)
+class QwenAvatarReviewResult:
+    is_avatar: bool
+    confidence: float
+    reason: str
+    risk_flags: list[str]
+    failure_reason: str | None = None
+    raw_content: str | None = None
+    response_text: str | None = None
+
+
 class QwenToolsClient:
     def __init__(
         self,
@@ -68,7 +87,8 @@ class QwenToolsClient:
             "display_name": author.display_name,
             "orcid": author.orcid,
             "institution_name": author.institution_name,
-            "concept_names": author.concept_names or [],
+            "institution_names": author.institution_names or [],
+            "institution_country_codes": author.institution_country_codes or [],
         }
 
     def _build_prompt(self, author: AuthorRecord) -> str:
@@ -80,6 +100,8 @@ class QwenToolsClient:
             "Return exactly one JSON object and nothing else.\n"
             "Keep only high-confidence author-related webpages such as ORCID, institutional faculty/staff/profile pages, and authoritative researcher databases.\n"
             "Reject social media, generic aggregators, publication pages, news pages, and weakly related search results.\n"
+            "Prefer pages whose institution, affiliation, ORCID, and researcher identity match the provided author context.\n"
+            "If you see a same-name person with conflicting institution evidence, lower confidence or exclude that page.\n"
             'Schema: {"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],"image_candidates":[],"filtered_candidates":[],"failure_reason":""}\n'
             "Use arrays, not null. Additional keys are forbidden.\n"
             f"Minimum confidence threshold reference: {self._min_confidence:.2f}.\n"
@@ -143,6 +165,79 @@ class QwenToolsClient:
             if isinstance(content, str) and content.strip():
                 return content
         return None
+
+    def _extract_tool_output_items(self, payload: dict[str, Any], tool_type: str) -> list[dict[str, Any]]:
+        output = payload.get("output")
+        if not isinstance(output, list):
+            return []
+        items: list[dict[str, Any]] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("type") or "").strip() != tool_type:
+                continue
+            items.append(item)
+        return items
+
+    def _extract_web_search_image_results(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        items = self._extract_tool_output_items(payload, "web_search_image_call")
+        results: list[dict[str, Any]] = []
+        for item in items:
+            raw_output = item.get("output")
+            parsed_rows: list[Any] = []
+            if isinstance(raw_output, str):
+                try:
+                    parsed = json.loads(raw_output)
+                    if isinstance(parsed, list):
+                        parsed_rows = parsed
+                except Exception:
+                    continue
+            elif isinstance(raw_output, list):
+                parsed_rows = raw_output
+            for row in parsed_rows:
+                if not isinstance(row, dict):
+                    continue
+                image_url = str(row.get("url") or row.get("image_url") or "").strip()
+                if not image_url.startswith("http"):
+                    continue
+                results.append(
+                    {
+                        "image_url": image_url,
+                        "title": str(row.get("title") or "").strip(),
+                        "source_url": str(
+                            row.get("source_url")
+                            or row.get("page_url")
+                            or row.get("referer_url")
+                            or row.get("origin_url")
+                            or ""
+                        ).strip(),
+                        "snippet": str(row.get("snippet") or row.get("description") or "").strip(),
+                    }
+                )
+        return results
+
+    def _parse_avatar_review(self, obj: dict[str, Any]) -> QwenAvatarReviewResult:
+        raw_is_avatar = obj.get("is_avatar")
+        if isinstance(raw_is_avatar, bool):
+            is_avatar = raw_is_avatar
+        elif isinstance(raw_is_avatar, (int, float)):
+            is_avatar = bool(raw_is_avatar)
+        else:
+            is_avatar = False
+        try:
+            confidence = float(obj.get("confidence"))
+        except Exception:
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+        reason = str(obj.get("reason") or "").strip()
+        raw_flags = obj.get("risk_flags")
+        risk_flags = [str(item).strip() for item in raw_flags] if isinstance(raw_flags, list) else []
+        return QwenAvatarReviewResult(
+            is_avatar=is_avatar,
+            confidence=confidence,
+            reason=reason,
+            risk_flags=[flag for flag in risk_flags if flag],
+        )
 
     def _validate_profile_page(self, row: object) -> tuple[dict[str, Any] | None, bool]:
         if not isinstance(row, dict):
@@ -252,3 +347,194 @@ class QwenToolsClient:
         normalized.response_format_mode = response_format_mode
         logger.info("qwen_web_search_finished author_id=%s profile_pages=%s failure_reason=%s", author.author_id, len(normalized.profile_pages), normalized.failure_reason)
         return normalized
+
+    def search_images(self, author: AuthorRecord, profile_pages: list[dict[str, Any]]) -> QwenImageSearchResult:
+        if not self._api_key:
+            return QwenImageSearchResult([], failure_reason="qwen_api_key_missing")
+        profile_context = [
+            {
+                "url": str(page.get("url") or "").strip(),
+                "title": str(page.get("title") or "").strip(),
+                "snippet": str(page.get("snippet") or "").strip(),
+            }
+            for page in profile_pages[:5]
+        ]
+        prompt = (
+            "Use web_search_image only.\n"
+            "Find candidate portrait images for the target scholar.\n"
+            "Prioritize image results that are likely tied to the provided ORCID or institution/profile evidence.\n"
+            "Avoid logos, banners, generic illustrations, group photos, and unrelated same-name people.\n"
+            f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}\n"
+            f"profile_pages={json.dumps(profile_context, ensure_ascii=False)}"
+        )
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
+            "temperature": 0,
+            "tools": [{"type": "web_search_image"}],
+        }
+        logger.info("qwen_web_search_image_started author_id=%s model=%s profile_pages=%s", author.author_id, self._model, len(profile_pages))
+        try:
+            data, _ = self._post_responses(payload)
+        except HTTPError as exc:
+            response = getattr(exc, "response", None)
+            response_text = response.text[:4000] if response is not None and response.text else None
+            return QwenImageSearchResult([], failure_reason="qwen_web_search_image_http_error", raw_content=response_text, response_text=response_text)
+        except ReadTimeout as exc:
+            return QwenImageSearchResult([], failure_reason="qwen_web_search_image_timeout", raw_content=str(exc)[:4000], response_text=str(exc)[:4000])
+        except Exception as exc:
+            return QwenImageSearchResult([], failure_reason="qwen_web_search_image_failed", raw_content=str(exc)[:4000], response_text=str(exc)[:4000])
+
+        response_text = self._extract_response_text(data if isinstance(data, dict) else {})
+        image_results = self._extract_web_search_image_results(data if isinstance(data, dict) else {})
+        if not image_results:
+            return QwenImageSearchResult(
+                [],
+                failure_reason="qwen_web_search_image_empty",
+                raw_content=json.dumps(data, ensure_ascii=False)[:4000],
+                response_text=(response_text or "")[:4000] or None,
+            )
+        logger.info("qwen_web_search_image_finished author_id=%s image_results=%s", author.author_id, len(image_results))
+        return QwenImageSearchResult(
+            image_results=image_results,
+            raw_content=json.dumps(data, ensure_ascii=False)[:4000],
+            response_text=(response_text or "")[:4000] or None,
+        )
+
+    def review_avatar_candidate(
+        self,
+        author: AuthorRecord,
+        candidate: dict[str, Any],
+        profile_pages: list[dict[str, Any]],
+    ) -> QwenAvatarReviewResult:
+        if not self._api_key:
+            return QwenAvatarReviewResult(
+                is_avatar=False,
+                confidence=0.0,
+                reason="missing qwen api key",
+                risk_flags=["api_key_missing"],
+                failure_reason="qwen_api_key_missing",
+            )
+        candidate_ctx = {
+            "image_url": str(candidate.get("image_url") or "").strip(),
+            "source_url": str(candidate.get("source_url") or "").strip(),
+            "title": str(candidate.get("title") or "").strip(),
+            "snippet": str(candidate.get("snippet") or "").strip(),
+            "image_alt": str(candidate.get("image_alt") or "").strip(),
+            "nearby_text": str(candidate.get("nearby_text") or "").strip(),
+            "width": candidate.get("width"),
+            "height": candidate.get("height"),
+            "mime": candidate.get("mime"),
+        }
+        prompt = (
+            "You are a strict avatar verifier.\n"
+            "Judge whether the provided image is a single-person headshot/avatar for the target author.\n"
+            "Reject banners, covers, logos, icons, group photos, illustrations, and identity-mismatch cases.\n"
+            "Use both image content and evidence context.\n"
+            "Return exactly one JSON object and nothing else.\n"
+            'Schema: {"is_avatar":true,"confidence":0.0,"reason":"","risk_flags":[]}\n'
+            f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}\n"
+            f"profile_pages={json.dumps(profile_pages[:5], ensure_ascii=False)}\n"
+            f"candidate={json.dumps(candidate_ctx, ensure_ascii=False)}"
+        )
+        image_url = candidate_ctx["image_url"]
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": prompt},
+                        {"type": "input_image", "image_url": image_url},
+                    ],
+                }
+            ],
+            "temperature": 0,
+            "response_format": self._build_response_format(),
+        }
+        logger.info("qwen_avatar_review_started author_id=%s image_url=%s", author.author_id, image_url)
+        try:
+            data, _ = self._post_responses(payload)
+        except HTTPError as exc:
+            response = getattr(exc, "response", None)
+            status_code = response.status_code if response is not None else None
+            response_text = response.text[:4000] if response is not None and response.text else None
+            if status_code in {400, 404, 422}:
+                fallback_payload = dict(payload)
+                fallback_payload["input"] = [
+                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                ]
+                try:
+                    data, _ = self._post_responses(fallback_payload)
+                except Exception as fallback_exc:
+                    return QwenAvatarReviewResult(
+                        is_avatar=False,
+                        confidence=0.0,
+                        reason=str(fallback_exc),
+                        risk_flags=["avatar_review_request_failed"],
+                        failure_reason="qwen_avatar_review_request_failed",
+                        raw_content=response_text,
+                        response_text=response_text,
+                    )
+            else:
+                return QwenAvatarReviewResult(
+                    is_avatar=False,
+                    confidence=0.0,
+                    reason=str(exc),
+                    risk_flags=["avatar_review_http_error"],
+                    failure_reason="qwen_avatar_review_http_error",
+                    raw_content=response_text,
+                    response_text=response_text,
+                )
+        except ReadTimeout as exc:
+            return QwenAvatarReviewResult(
+                is_avatar=False,
+                confidence=0.0,
+                reason=str(exc),
+                risk_flags=["avatar_review_timeout"],
+                failure_reason="qwen_avatar_review_timeout",
+                raw_content=str(exc)[:4000],
+                response_text=str(exc)[:4000],
+            )
+        except Exception as exc:
+            return QwenAvatarReviewResult(
+                is_avatar=False,
+                confidence=0.0,
+                reason=str(exc),
+                risk_flags=["avatar_review_request_failed"],
+                failure_reason="qwen_avatar_review_request_failed",
+                raw_content=str(exc)[:4000],
+                response_text=str(exc)[:4000],
+            )
+
+        response_text = self._extract_response_text(data if isinstance(data, dict) else {})
+        if not response_text:
+            return QwenAvatarReviewResult(
+                is_avatar=False,
+                confidence=0.0,
+                reason="missing model output",
+                risk_flags=["avatar_review_output_missing"],
+                failure_reason="qwen_avatar_review_output_missing",
+                raw_content=json.dumps(data, ensure_ascii=False)[:4000],
+            )
+        obj = self._extract_json_object(response_text)
+        if obj is None:
+            return QwenAvatarReviewResult(
+                is_avatar=False,
+                confidence=0.0,
+                reason="model output is not valid json object",
+                risk_flags=["avatar_review_output_not_json"],
+                failure_reason="qwen_avatar_review_output_not_json",
+                raw_content=response_text[:4000],
+                response_text=response_text[:4000],
+            )
+        review = self._parse_avatar_review(obj)
+        review.raw_content = response_text[:4000]
+        review.response_text = response_text[:4000]
+        logger.info(
+            "qwen_avatar_review_finished author_id=%s is_avatar=%s confidence=%.3f",
+            author.author_id,
+            review.is_avatar,
+            review.confidence,
+        )
+        return review

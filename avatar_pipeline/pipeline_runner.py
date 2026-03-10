@@ -86,6 +86,20 @@ class PipelineRunner:
             filtered_candidates=len(outcome.filtered_candidates),
             failure_reason=outcome.failure_reason,
         )
+        if outcome.failure_reason and "institutional mismatch" in outcome.failure_reason.lower():
+            self._log_step(author, "qwen_search_identity_mismatch", failure_reason=outcome.failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=outcome.failure_reason,
+                failure_reason=outcome.failure_reason,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
         if not outcome.candidates:
             failure_reason = outcome.failure_reason or "qwen_no_candidates"
             self._log_step(author, "qwen_search_empty", failure_reason=failure_reason)
@@ -115,6 +129,29 @@ class PipelineRunner:
         candidates = self._web_search.cluster_candidates(candidates, fingerprint_top_n=8)
         self._log_step(author, "dedupe_cluster_done", candidates=len(candidates))
         ranked = self._rank_candidates(author, candidates)
+        ranked_candidates = [self._ranked_candidate_summary(candidate) for candidate in ranked[:3]]
+        logger.info(
+            "pipeline_ranked_candidates run_id=%s author_id=%s ranked_candidates=%s",
+            self._run_store.run_id,
+            author.author_id,
+            ranked_candidates,
+        )
+        if self._should_fail_small_avatar_fallback(ranked):
+            failure_reason = "small_avatar_only_background_fallback"
+            self._log_step(author, "select_best_candidate_rejected", failure_reason=failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=failure_reason,
+                failure_reason=failure_reason,
+                ranked_candidates=ranked_candidates,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
         self._log_step(author, "select_best_candidate_start", ranked=len(ranked))
         selected = self._select_candidate(ranked)
         if selected is None:
@@ -125,6 +162,7 @@ class PipelineRunner:
                 status="no_image",
                 error_message=failure_reason,
                 failure_reason=failure_reason,
+                ranked_candidates=ranked_candidates,
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
@@ -150,6 +188,7 @@ class PipelineRunner:
                 error_message=failure_reason,
                 failure_reason=failure_reason,
                 commons_file=selected.source_url,
+                ranked_candidates=ranked_candidates,
                 selected_candidate=selected_dict,
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
@@ -183,12 +222,64 @@ class PipelineRunner:
                 error_message=image_error,
                 failure_reason=image_error,
                 commons_file=selected.source_url,
+                ranked_candidates=ranked_candidates,
                 selected_candidate=selected_dict,
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
+
+        self._log_step(author, "llm_avatar_review_start", image_url=selected.image_url)
+        review = self._web_search.review_avatar_candidate(author, selected, outcome.profile_pages)
+        selected_dict["llm_avatar_review"] = {
+            "is_avatar": review.is_avatar,
+            "confidence": review.confidence,
+            "reason": review.reason,
+            "risk_flags": review.risk_flags,
+            "failure_reason": review.failure_reason,
+        }
+        if review.failure_reason:
+            self._log_step(author, "llm_avatar_review_failed", failure_reason=review.failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=review.failure_reason,
+                failure_reason=review.failure_reason,
+                commons_file=selected.source_url,
+                ranked_candidates=ranked_candidates,
+                selected_candidate=selected_dict,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=review.raw_content or outcome.raw_content,
+                response_text=review.response_text or outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
+        self._log_step(
+            author,
+            "llm_avatar_review_done",
+            is_avatar=review.is_avatar,
+            confidence=f"{review.confidence:.3f}",
+        )
+        if not review.is_avatar:
+            failure_reason = "llm_avatar_review_rejected"
+            self._log_step(author, "llm_avatar_review_rejected", failure_reason=failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=review.reason or failure_reason,
+                failure_reason=failure_reason,
+                commons_file=selected.source_url,
+                ranked_candidates=ranked_candidates,
+                selected_candidate=selected_dict,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=review.raw_content or outcome.raw_content,
+                response_text=review.response_text or outcome.response_text,
                 abandon_reason_log=outcome.abandon_reason_log,
             )
 
@@ -202,6 +293,7 @@ class PipelineRunner:
                 content_sha256=sha256,
                 oss_object_key=existing_avatar["oss_object_key"],
                 oss_url=existing_avatar.get("oss_url"),
+                ranked_candidates=ranked_candidates,
                 selected_candidate=selected_dict,
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
@@ -222,6 +314,7 @@ class PipelineRunner:
             content_sha256=sha256,
             oss_object_key=object_key,
             oss_url=oss_url,
+            ranked_candidates=ranked_candidates,
             selected_candidate=selected_dict,
             profile_pages=outcome.profile_pages,
             image_candidates=outcome.image_candidates,
@@ -269,11 +362,42 @@ class PipelineRunner:
             "cluster_evidence_summary": candidate.cluster_evidence_summary,
         }
 
+    def _ranked_candidate_summary(self, candidate: SearchCandidate) -> dict[str, object]:
+        return {
+            "image_url": candidate.image_url,
+            "source_url": candidate.source_url,
+            "pre_rank_score": candidate.pre_rank_score,
+            "is_valid_image": candidate.is_valid_image,
+            "invalid_reason": candidate.invalid_reason,
+            "width": candidate.width,
+            "height": candidate.height,
+            "mime": candidate.mime,
+        }
+
     def _select_candidate(self, ranked: list[SearchCandidate]) -> SearchCandidate | None:
         valid = [candidate for candidate in ranked if candidate.is_valid_image is True]
         if valid:
             return valid[0]
         return ranked[0] if ranked else None
+
+    def _should_fail_small_avatar_fallback(self, ranked: list[SearchCandidate]) -> bool:
+        if not ranked:
+            return False
+        top = ranked[0]
+        if top.is_valid_image is not False or top.invalid_reason != "invalid_image_too_small":
+            return False
+        top_url = (top.image_url or "").lower()
+        top_text = " ".join([top.image_url or "", top.image_alt or "", top.nearby_text or ""]).lower()
+        if not any(token in (top_url + " " + top_text) for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
+            return False
+        valid_candidates = [candidate for candidate in ranked[1:] if candidate.is_valid_image is True]
+        if not valid_candidates:
+            return False
+        for candidate in valid_candidates:
+            text = " ".join([candidate.image_url or "", candidate.image_alt or "", candidate.nearby_text or ""]).lower()
+            if not any(token in text for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "banner")):
+                return False
+        return True
 
     def _score_candidate(self, author: AuthorRecord, candidate: SearchCandidate) -> float:
         name = (author.display_name or "").strip().lower()
@@ -338,14 +462,26 @@ class PipelineRunner:
                 candidate.image_url or "",
                 candidate.image_alt or "",
                 candidate.nearby_text or "",
+                candidate.title or "",
+                candidate.snippet or "",
+                candidate.page_title or "",
+                candidate.page_h1 or "",
+                candidate.page_meta_description or "",
             ]
         ).lower()
         if any(token in image_blob for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
             score -= 2.5
         if any(token in image_blob for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "loading", "spinner")):
             score -= 3.0
+        if any(token in image_blob for token in ("cnrs", "inria", "inrae", "coretrustseal", "seal", "emblem", "logo")) and "/public/" in (candidate.image_url or "").lower():
+            score -= 4.0
         if any(token in image_blob for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
             score += 1.0
+        image_url_lower = (candidate.image_url or "").lower()
+        if domain == "researchmap.jp" and image_url_lower.endswith("/avatar.jpg"):
+            score += 4.0
+        if domain == "researchmap.jp" and "cover_picture" in image_url_lower:
+            score -= 6.0
 
         candidate.pre_rank_score = score
         return score

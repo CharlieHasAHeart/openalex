@@ -38,6 +38,7 @@ class LocalRunStore:
             "profile_pages": result.profile_pages,
             "image_candidates": result.image_candidates,
             "filtered_candidates": result.filtered_candidates,
+            "ranked_candidates": result.ranked_candidates,
             "selected_candidate": result.selected_candidate,
             "final_status": result.status,
             "failure_reason": result.failure_reason or result.error_message,

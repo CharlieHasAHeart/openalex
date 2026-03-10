@@ -89,8 +89,6 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         optional_cols = [
             "orcid",
             "display_name",
-            "x_concepts",
-            "concepts",
             "last_known_institutions",
             "affiliations",
         ]
@@ -102,34 +100,49 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                 select_parts.append(f"NULL AS {col}")
         return ",\n            ".join(select_parts)
 
+    def _extract_institution_names_and_countries(self, value: Any) -> tuple[list[str], list[str]]:
+        names: list[str] = []
+        countries: list[str] = []
+        rows = value if isinstance(value, list) else ([value] if isinstance(value, dict) else [])
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            name = (
+                str(item.get("institution_display_name") or item.get("display_name") or item.get("institution_name") or "")
+                .strip()
+            )
+            if name and name not in names:
+                names.append(name)
+            country = str(item.get("institution_country_code") or item.get("country_code") or "").strip().upper()
+            if country and country not in countries:
+                countries.append(country)
+        return names, countries
+
     def _row_to_author_record(self, row: dict[str, Any], id_col: str) -> AuthorRecord | None:
         raw_id = row.get("author_id") or row.get(id_col)
         if raw_id is None:
             return None
-        institution_name: str | None = None
         last_known_institutions = row.get("last_known_institutions")
-        if isinstance(last_known_institutions, list) and last_known_institutions:
-            first = last_known_institutions[0]
-            if isinstance(first, dict):
-                institution_name = (first.get("display_name") or "").strip() or None
-        elif isinstance(last_known_institutions, dict):
-            institution_name = (last_known_institutions.get("display_name") or "").strip() or None
-
-        concept_names: list[str] = []
-        raw_concepts = row.get("x_concepts") or row.get("concepts") or []
-        if isinstance(raw_concepts, list):
-            for item in raw_concepts:
-                if isinstance(item, dict):
-                    name = str(item.get("display_name") or "").strip()
-                    if name:
-                        concept_names.append(name)
+        affiliations = row.get("affiliations")
+        institution_names, country_codes = self._extract_institution_names_and_countries(last_known_institutions)
+        affiliation_names, affiliation_countries = self._extract_institution_names_and_countries(affiliations)
+        for name in affiliation_names:
+            if name not in institution_names:
+                institution_names.append(name)
+        for country in affiliation_countries:
+            if country not in country_codes:
+                country_codes.append(country)
+        institution_name = institution_names[0] if institution_names else None
 
         return AuthorRecord(
             author_id=str(raw_id).strip(),
             display_name=str(row.get("display_name") or "").strip(),
             orcid_url=str(row.get("orcid")).strip() if row.get("orcid") else None,
             institution_name=institution_name,
-            concept_names=concept_names,
+            institution_names=institution_names,
+            institution_country_codes=country_codes,
+            affiliations=affiliations,
+            last_known_institutions=last_known_institutions,
             profile=row,
         )
 
