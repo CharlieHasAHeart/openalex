@@ -327,9 +327,23 @@ class PipelineRunner:
             aspect_ratio = max(candidate.width / candidate.height, candidate.height / candidate.width)
             if aspect_ratio > 4.5:
                 score -= 1.5
+            if candidate.width > candidate.height:
+                score -= min((candidate.width / max(candidate.height, 1)) - 1.0, 1.5)
 
         if candidate.merged_count and candidate.merged_count > 1:
             score += min((candidate.merged_count - 1) * 0.25, 1.0)
+
+        image_blob = " ".join(
+            [
+                candidate.image_url or "",
+                candidate.image_alt or "",
+                candidate.nearby_text or "",
+            ]
+        ).lower()
+        if any(token in image_blob for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
+            score -= 2.5
+        if any(token in image_blob for token in ("portrait", "headshot", "profile photo", "basic_photo_1")):
+            score += 1.0
 
         candidate.pre_rank_score = score
         return score

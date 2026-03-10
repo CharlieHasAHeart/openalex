@@ -580,9 +580,15 @@ class WebSearchClient:
             score += 0.6
         if candidate.width and candidate.height:
             score += min((candidate.width * candidate.height) / 600000.0, 2.0)
+            if candidate.width > candidate.height:
+                score -= min((candidate.width / max(candidate.height, 1)) - 1.0, 1.5)
         text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
         if any(token in text for token in ("group", "team", "lab members", "thumbnail", "logo", "icon")):
             score -= 2.0
+        if any(token in text for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
+            score -= 2.5
+        if any(token in text for token in ("portrait", "headshot", "profile photo", "basic_photo_1")):
+            score += 1.0
         if candidate.merged_count and candidate.merged_count > 1:
             score += min((candidate.merged_count - 1) * 0.2, 1.0)
         candidate.pre_rank_score = score
