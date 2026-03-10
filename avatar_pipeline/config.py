@@ -3,28 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-DEFAULT_LOCAL_PROXY = "http://127.0.0.1:7890"
-
-
-def _has_env_value(name: str) -> bool:
-    value = os.getenv(name)
-    return value is not None and value.strip() != ""
-
-
-def _apply_default_proxy_env() -> None:
-    http_set = _has_env_value("http_proxy") or _has_env_value("HTTP_PROXY")
-    https_set = _has_env_value("https_proxy") or _has_env_value("HTTPS_PROXY")
-    if not http_set:
-        os.environ["http_proxy"] = DEFAULT_LOCAL_PROXY
-        os.environ["HTTP_PROXY"] = DEFAULT_LOCAL_PROXY
-    if not https_set:
-        os.environ["https_proxy"] = DEFAULT_LOCAL_PROXY
-        os.environ["HTTPS_PROXY"] = DEFAULT_LOCAL_PROXY
-
-
 def load_dotenv(path: str = ".env", override: bool = False) -> None:
     if not os.path.exists(path):
-        _apply_default_proxy_env()
         return
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -36,7 +16,6 @@ def load_dotenv(path: str = ".env", override: bool = False) -> None:
             value = value.strip().strip("'").strip('"')
             if key and (override or key not in os.environ):
                 os.environ[key] = value
-    _apply_default_proxy_env()
 
 
 def _get_env(name: str, default: str | None = None, required: bool = False) -> str:
@@ -102,7 +81,6 @@ class PipelineConfig:
 
     @classmethod
     def from_env(cls) -> "PipelineConfig":
-        _apply_default_proxy_env()
         allowed_mime_raw = _get_env("ALLOWED_MIME", "image/jpeg,image/png,image/webp")
         allowed_mime = {item.strip() for item in allowed_mime_raw.split(",") if item.strip()}
         bucket = _get_env("ALIYUN_OSS_BUCKET", required=True)
