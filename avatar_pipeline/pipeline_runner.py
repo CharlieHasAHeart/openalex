@@ -73,6 +73,8 @@ class PipelineRunner:
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
             )
 
         candidates = self._web_search.enrich_candidates_context(outcome.candidates, limit=self._context_enrich_limit)
@@ -95,6 +97,8 @@ class PipelineRunner:
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
             )
 
         selected_dict = self._candidate_to_dict(selected)
@@ -110,6 +114,8 @@ class PipelineRunner:
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
             )
 
         image_bytes, actual_mime = self._web_search.download_image(selected.image_url)
@@ -138,6 +144,8 @@ class PipelineRunner:
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
             )
 
         sha256 = sha256_hex(image_bytes)
@@ -153,6 +161,8 @@ class PipelineRunner:
                 profile_pages=outcome.profile_pages,
                 image_candidates=outcome.image_candidates,
                 filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
             )
 
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, actual_mime)
@@ -168,6 +178,8 @@ class PipelineRunner:
             profile_pages=outcome.profile_pages,
             image_candidates=outcome.image_candidates,
             filtered_candidates=outcome.filtered_candidates,
+            raw_content=outcome.raw_content,
+            response_text=outcome.response_text,
         )
         self._repo.upsert_result(result)
         logger.info(

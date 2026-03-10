@@ -61,6 +61,14 @@ class SearchOutcome:
     candidates: list[SearchCandidate]
     failure_reason: str | None = None
     reason_tags: list[str] | None = None
+    raw_content: str | None = None
+    response_text: str | None = None
+
+
+@dataclass(slots=True)
+class CachedImage:
+    content: bytes
+    mime: str
 
 
 def _guess_mime_from_url(url: str) -> str:
@@ -91,6 +99,7 @@ class WebSearchClient:
         self._http = http
         self._max_candidates = max(1, max_candidates)
         self._min_confidence = max(0.0, min(1.0, qwen_min_confidence))
+        self._image_cache: dict[str, CachedImage] = {}
         self._qwen_tools = QwenToolsClient(
             http=http,
             api_key=qwen_api_key,
@@ -226,6 +235,8 @@ class WebSearchClient:
             candidates=candidates,
             failure_reason=result.failure_reason,
             reason_tags=sorted(reason_tags),
+            raw_content=result.raw_content,
+            response_text=result.response_text,
         )
 
     def _clean_text(self, value: str | None) -> str | None:
@@ -458,7 +469,13 @@ class WebSearchClient:
         return finalized
 
     def download_image(self, url: str) -> tuple[bytes, str]:
+        cache_key = self._normalize_image_url(url)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached.content, cached.mime
         resp = self._http.request("GET", url, stream=False)
         content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         mime = content_type if content_type else _guess_mime_from_url(url)
-        return resp.content, mime
+        content = resp.content
+        self._image_cache[cache_key] = CachedImage(content=content, mime=mime)
+        return content, mime

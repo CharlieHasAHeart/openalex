@@ -47,3 +47,5 @@ class PipelineResult:
     profile_pages: list[dict[str, Any]] = field(default_factory=list)
     image_candidates: list[dict[str, Any]] = field(default_factory=list)
     filtered_candidates: list[dict[str, Any]] = field(default_factory=list)
+    raw_content: str | None = None
+    response_text: str | None = None

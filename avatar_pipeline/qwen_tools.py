@@ -21,6 +21,8 @@ class QwenSearchResult:
     filtered_candidates: list[dict[str, Any]]
     failure_reason: str | None = None
     raw_content: str | None = None
+    response_text: str | None = None
+    response_format_mode: str | None = None
     invalid_profile_page_count: int = 0
     invalid_image_candidate_count: int = 0
     invalid_filtered_candidate_count: int = 0
@@ -64,6 +66,10 @@ class QwenToolsClient:
         }
         return (
             "You are an author-avatar candidate discovery engine.\n"
+            "Return exactly one JSON object and nothing else.\n"
+            "Do not wrap JSON in markdown fences.\n"
+            "Do not emit analysis, commentary, or explanatory text.\n"
+            "If evidence is weak, return empty arrays and set failure_reason.\n"
             "Workflow:\n"
             "1) Use web_search to find official profile pages (faculty/staff/person/people/team/member/bio).\n"
             "2) Use t2i_search to find portrait/headshot image candidates.\n"
@@ -78,10 +84,21 @@ class QwenToolsClient:
             '"filtered_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],'
             '"failure_reason":""'
             "}\n"
+            "Constraints:\n"
+            "- Keys must match the schema exactly.\n"
+            "- Use arrays, not null.\n"
+            "- confidence must be numeric.\n"
+            "- source_url/image_url/url must be absolute http(s) URLs.\n"
+            "- additional keys are forbidden.\n"
             f"`filtered_candidates` is the final list for pipeline consumption (max {max_candidates}).\n"
             f"Minimum confidence threshold reference: {self._min_confidence:.2f}.\n"
             f"author={json.dumps(author_ctx, ensure_ascii=False)}"
         )
+
+    def _build_response_format(self) -> dict[str, Any]:
+        return {
+            "type": "json_object",
+        }
 
     def _extract_json_object(self, content: str) -> dict[str, Any] | None:
         stripped = content.strip()
@@ -93,13 +110,24 @@ class QwenToolsClient:
                 return obj
         except Exception:
             pass
-        match = re.search(r"\{.*\}", stripped, re.DOTALL)
-        if not match:
+        decoder = json.JSONDecoder()
+        start = stripped.find("{")
+        if start < 0:
             return None
         try:
-            obj = json.loads(match.group(0))
+            obj, end = decoder.raw_decode(stripped[start:])
         except Exception:
-            return None
+            match = re.search(r"\{.*\}", stripped, re.DOTALL)
+            if not match:
+                return None
+            try:
+                obj = json.loads(match.group(0))
+            except Exception:
+                return None
+            return obj if isinstance(obj, dict) else None
+        trailing = stripped[start + end :].strip()
+        if trailing:
+            logger.warning("qwen_output_has_trailing_text trailing=%r", trailing[:160])
         return obj if isinstance(obj, dict) else None
 
     def _extract_response_text(self, payload: dict[str, Any]) -> str | None:
@@ -230,6 +258,11 @@ class QwenToolsClient:
             filtered_candidates.append(normalized)
 
         failure_reason = str(obj.get("failure_reason") or "").strip() or None
+        allowed_keys = {"profile_pages", "image_candidates", "filtered_candidates", "failure_reason"}
+        extra_keys = sorted(set(obj.keys()) - allowed_keys)
+        if extra_keys:
+            schema_issue_count += len(extra_keys)
+            logger.warning("qwen_schema_extra_keys keys=%s", ",".join(extra_keys))
         if not filtered_candidates and filtered_rows:
             failure_reason = failure_reason or "qwen_schema_invalid"
         if not filtered_candidates and not filtered_rows:
@@ -262,6 +295,20 @@ class QwenToolsClient:
     def _response_url(self) -> str:
         return f"{self._base_url}{self._response_path}"
 
+    def _post_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        resp = self._http.request(
+            "POST",
+            self._response_url(),
+            headers=headers,
+            json=payload,
+            timeout=self._timeout_seconds,
+        )
+        return resp.json()
+
     def search_author(self, author: AuthorRecord, max_candidates: int) -> QwenSearchResult:
         if not self._api_key:
             return QwenSearchResult([], [], [], failure_reason="qwen_api_key_missing")
@@ -284,11 +331,8 @@ class QwenToolsClient:
         }
         if tools:
             payload["tools"] = tools
-
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
+        payload["response_format"] = self._build_response_format()
+        response_format_mode = "json_object"
         logger.info(
             "qwen_request_started author_id=%s model=%s endpoint=%s web_search=%s t2i_search=%s",
             author.author_id,
@@ -298,34 +342,80 @@ class QwenToolsClient:
             self._enable_t2i_search,
         )
         try:
-            resp = self._http.request(
-                "POST",
-                self._response_url(),
-                headers=headers,
-                json=payload,
-                timeout=self._timeout_seconds,
-            )
+            data = self._post_responses(payload)
         except HTTPError as exc:
-            logger.warning("qwen_http_error author_id=%s error_message=%s", author.author_id, str(exc))
-            return QwenSearchResult([], [], [], failure_reason="qwen_http_error")
+            response = getattr(exc, "response", None)
+            status_code = response.status_code if response is not None else None
+            response_text = response.text[:2000] if response is not None and response.text else None
+            if status_code in {400, 404, 422}:
+                logger.warning(
+                    "qwen_response_format_retry author_id=%s status_code=%s error_message=%s",
+                    author.author_id,
+                    status_code,
+                    str(exc),
+                )
+                try:
+                    fallback_payload = dict(payload)
+                    fallback_payload.pop("response_format", None)
+                    data = self._post_responses(fallback_payload)
+                    response_format_mode = "prompt_only_fallback"
+                except HTTPError as fallback_exc:
+                    logger.warning("qwen_http_error author_id=%s error_message=%s", author.author_id, str(fallback_exc))
+                    fallback_response = getattr(fallback_exc, "response", None)
+                    fallback_text = fallback_response.text[:2000] if fallback_response is not None and fallback_response.text else response_text
+                    return QwenSearchResult(
+                        [],
+                        [],
+                        [],
+                        failure_reason="qwen_http_error",
+                        raw_content=fallback_text,
+                        response_text=fallback_text,
+                        response_format_mode=response_format_mode,
+                    )
+                except Exception as fallback_exc:
+                    logger.warning("qwen_request_failed author_id=%s error_message=%s", author.author_id, str(fallback_exc))
+                    return QwenSearchResult(
+                        [],
+                        [],
+                        [],
+                        failure_reason="qwen_request_failed",
+                        raw_content=response_text,
+                        response_text=response_text,
+                        response_format_mode=response_format_mode,
+                    )
+            else:
+                logger.warning("qwen_http_error author_id=%s error_message=%s", author.author_id, str(exc))
+                return QwenSearchResult(
+                    [],
+                    [],
+                    [],
+                    failure_reason="qwen_http_error",
+                    raw_content=response_text,
+                    response_text=response_text,
+                    response_format_mode=response_format_mode,
+                )
         except Exception as exc:
             logger.warning("qwen_request_failed author_id=%s error_message=%s", author.author_id, str(exc))
-            return QwenSearchResult([], [], [], failure_reason="qwen_request_failed")
-
-        logger.info("qwen_response_received author_id=%s status_code=%s", author.author_id, resp.status_code)
-        try:
-            data = resp.json()
-        except Exception:
-            return QwenSearchResult([], [], [], failure_reason="qwen_response_decode_failed")
+            return QwenSearchResult([], [], [], failure_reason="qwen_request_failed", response_format_mode=response_format_mode)
 
         response_text = self._extract_response_text(data if isinstance(data, dict) else {})
         if not response_text:
-            return QwenSearchResult([], [], [], failure_reason="qwen_output_missing")
+            return QwenSearchResult([], [], [], failure_reason="qwen_output_missing", raw_content=json.dumps(data, ensure_ascii=False)[:2000], response_format_mode=response_format_mode)
 
         obj = self._extract_json_object(response_text)
         if obj is None:
-            return QwenSearchResult([], [], [], failure_reason="qwen_output_not_json", raw_content=response_text[:1200])
+            return QwenSearchResult(
+                [],
+                [],
+                [],
+                failure_reason="qwen_output_not_json",
+                raw_content=response_text[:4000],
+                response_text=response_text[:4000],
+                response_format_mode=response_format_mode,
+            )
 
         normalized = self._normalize_response_payload(obj)
-        normalized.raw_content = response_text[:1200]
+        normalized.raw_content = response_text[:4000]
+        normalized.response_text = response_text[:4000]
+        normalized.response_format_mode = response_format_mode
         return normalized

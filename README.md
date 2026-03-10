@@ -27,6 +27,7 @@
 - `avatar_pipeline/pipeline_runner.py`: 线性主流程编排
 - `avatar_pipeline/pg_repository.py`: 作者读取 + `authors_avatars` 查询/upsert
 - `avatar_pipeline/local_run_store.py`: 本地运行日志落盘
+- `review_runs.py`: 本地 runs 轻量审查工具
 - `avatar_pipeline/oss_uploader.py`: OSS 上传
 
 ## 环境变量
@@ -101,6 +102,8 @@ runs/<date>/<run_id>/
   failures.jsonl
 ```
 
+失败样本会额外保留 `raw_content` / `response_text`，便于排查 Qwen 返回格式问题。
+
 单个作者记录至少包含：
 
 - `author_id`
@@ -114,7 +117,29 @@ runs/<date>/<run_id>/
 - `failure_reason`
 - `oss_url`
 - `content_sha256`
+- `raw_content`
+- `response_text`
 - `timestamp`
+
+## runs 审查工具
+
+查看某个 run 的 summary：
+
+```bash
+python3 review_runs.py --run-id <run_id> --show-summary
+```
+
+按作者查询记录：
+
+```bash
+python3 review_runs.py --run-id <run_id> --author-id <author_id>
+```
+
+导出 failures 为 CSV：
+
+```bash
+python3 review_runs.py --run-id <run_id> --failures-csv failures.csv
+```
 
 ## 数据库说明
 
@@ -130,3 +155,10 @@ runs/<date>/<run_id>/
 - 不再读写 `openalex.avatar_candidate_decisions`
 
 删除这些表的建议 SQL 见 [migrations/20260310_drop_avatar_pipeline_runtime_tables.sql](/home/charlie/workspace/openalex/migrations/20260310_drop_avatar_pipeline_runtime_tables.sql)。
+
+安全迁移顺序：
+
+1. 先在新极简链路上跑一批作者，确认 `public.authors_avatars` 正常写入。
+2. 检查 `runs/<date>/<run_id>/summary.json`、`author_runs.jsonl`、`failures.jsonl`，必要时用 `review_runs.py` 抽查失败样本里的 `raw_content` / `response_text`。
+3. 确认本地 runs 审计已满足排查需要后，再人工执行 drop migration。
+4. 不要在应用代码里自动执行删除 runtime tables 的 SQL。

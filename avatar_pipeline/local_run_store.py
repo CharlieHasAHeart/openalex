@@ -43,6 +43,8 @@ class LocalRunStore:
             "failure_reason": result.failure_reason or result.error_message,
             "oss_url": result.oss_url,
             "content_sha256": result.content_sha256,
+            "raw_content": result.raw_content,
+            "response_text": result.response_text,
             "timestamp": timestamp,
         }
         line = json.dumps(row, ensure_ascii=False) + "\n"
