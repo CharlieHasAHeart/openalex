@@ -44,11 +44,7 @@ class HttpClient:
         self._retry_jitter_ratio = max(retry_jitter_ratio, 0.0)
         self._retry_429_min_delay_seconds = max(retry_429_min_delay_seconds, 0.0)
         self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "User-Agent": "openalex-avatar-pipeline/1.0 (+https://openalex.org)",
-            }
-        )
+        self._session.headers.update({"User-Agent": "openalex-avatar-pipeline/1.0 (+https://openalex.org)"})
 
     def _sleep_before_retry(self, attempt: int, resp: requests.Response | None = None) -> None:
         delay = min(self._retry_base_seconds * (2 ** (attempt - 1)), self._retry_max_seconds)
@@ -56,21 +52,20 @@ class HttpClient:
             retry_after_raw = resp.headers.get("Retry-After")
             if retry_after_raw:
                 try:
-                    retry_after_delay = float(retry_after_raw.strip())
-                    delay = max(delay, retry_after_delay)
+                    delay = max(delay, float(retry_after_raw.strip()))
                 except ValueError:
                     pass
             delay = max(delay, self._retry_429_min_delay_seconds)
-
         jitter = delay * self._retry_jitter_ratio * random.random()
         time.sleep(delay + jitter)
 
     def request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        timeout = kwargs.pop("timeout", self._timeout)
         for attempt in range(1, self._max_retries + 1):
             if self._rate_limiter:
                 self._rate_limiter.wait()
             try:
-                resp = self._session.request(method, url, timeout=self._timeout, **kwargs)
+                resp = self._session.request(method, url, timeout=timeout, **kwargs)
                 if resp.status_code in (429, 500, 502, 503, 504):
                     if attempt == self._max_retries:
                         resp.raise_for_status()

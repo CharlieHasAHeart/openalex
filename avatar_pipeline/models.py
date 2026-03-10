@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -22,31 +22,6 @@ class AuthorRecord:
             return None
         return value.split("/")[-1]
 
-    @classmethod
-    def from_openalex(cls, data: dict[str, Any]) -> "AuthorRecord":
-        institution_name = None
-        lki = data.get("last_known_institution") or {}
-        if isinstance(lki, dict):
-            institution_name = lki.get("display_name")
-
-        concept_names: list[str] = []
-        raw_concepts = data.get("x_concepts") or []
-        if isinstance(raw_concepts, list):
-            for item in raw_concepts:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get("display_name")
-                if isinstance(name, str) and name:
-                    concept_names.append(name)
-
-        return cls(
-            author_id=data["id"],
-            display_name=data.get("display_name", ""),
-            orcid_url=data.get("orcid"),
-            institution_name=institution_name,
-            concept_names=concept_names,
-        )
-
 
 @dataclass(slots=True)
 class ImageCandidate:
@@ -63,41 +38,12 @@ class PipelineResult:
     author_id: str
     status: str
     error_message: str | None = None
-    wikidata_qid: str | None = None
+    failure_reason: str | None = None
     commons_file: str | None = None
     content_sha256: str | None = None
     oss_object_key: str | None = None
     oss_url: str | None = None
-    selected_candidate_id: int | None = None
-    llm_confidence: float | None = None
-    decision_reason: str | None = None
-    decision_mode: str | None = None
-    acceptance_score: float | None = None
-    fallback_used: bool | None = None
-    review_recommendation: str | None = None
-
-
-@dataclass(slots=True)
-class FinalDecisionAssessment:
-    accept: bool
-    fallback_used: bool = False
-    selected_index: int | None = None
-    acceptance_score: float | None = None
-    score_margin: float | None = None
-    decision_reason: str = ""
-    decision_mode: str = "ambiguous"
-
-
-@dataclass(slots=True)
-class ReviewAssessment:
-    review_summary: str
-    review_risk_flags: list[str]
-    review_recommendation: str
-
-
-@dataclass(slots=True)
-class AuthorCandidate:
-    author: AuthorRecord
-    seed_work_id: str
-    seed_work_cited_by_count: int
-    appearance_count: int = 1
+    selected_candidate: dict[str, Any] | None = None
+    profile_pages: list[dict[str, Any]] = field(default_factory=list)
+    image_candidates: list[dict[str, Any]] = field(default_factory=list)
+    filtered_candidates: list[dict[str, Any]] = field(default_factory=list)
