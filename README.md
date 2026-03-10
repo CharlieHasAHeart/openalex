@@ -91,6 +91,64 @@ python3 main.py --author-ids-file author_ids.json --workers 4
 python3 main.py --author-limit 1000 --author-offset 0 --workers 4
 ```
 
+## 冒烟测试
+
+环境变量准备：
+
+- 数据库：`PGHOST`、`PGPORT`、`PGDATABASE`、`PGUSER`、`PGPASSWORD`
+- OSS：`ALIYUN_OSS_ACCESS_KEY_ID`、`ALIYUN_OSS_ACCESS_KEY_SECRET`、`ALIYUN_OSS_BUCKET`、`ALIYUN_OSS_ENDPOINT`、`ALIYUN_OSS_PUBLIC_BASE_URL`
+- Qwen：`QWEN_API_KEY`
+
+单作者测试命令：
+
+```bash
+python3 main.py --author-id A5038153411 --workers 1 --progress-every 1 --log-level INFO
+```
+
+小批量测试命令：
+
+```bash
+python3 main.py --author-ids-file author_ids.json --workers 1 --progress-every 1 --log-level INFO
+```
+
+`author_ids.json` 示例：
+
+```json
+[
+  {"author_id": "A5038153411"},
+  {"author_id": "A5102019800"}
+]
+```
+
+运行日志会按 author 打出关键步骤：
+
+- `load_author`
+- `qwen_search_start`
+- `qwen_search_done`
+- `normalize_candidates`
+- `enrich_context_done`
+- `enrich_image_metadata_done`
+- `dedupe_cluster_done`
+- `select_best_candidate_done`
+- `upload_oss_done`
+- `upsert_authors_avatars_done`
+
+成功时应该检查：
+
+- `runs/<date>/<run_id>/summary.json`
+- `runs/<date>/<run_id>/author_runs.jsonl`
+- `public.authors_avatars` 中对应 author 的 upsert 结果
+- 成功记录里的 `final_status=ok`
+- 成功记录里的 `selected_candidate`、`oss_url`、`content_sha256`
+
+失败时应该检查：
+
+- `runs/<date>/<run_id>/failures.jsonl`
+- 失败记录里的 `final_status`、`failure_reason`
+- 如果是 Qwen 输出/结构化失败，重点看 `raw_content` 和 `response_text`
+- 如果是图片问题，重点看 `selected_candidate.invalid_reason`
+- 终端日志里最后停留的 `pipeline_step`
+
 ## 本地运行日志
 
 每次运行会生成：

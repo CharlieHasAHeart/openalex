@@ -33,6 +33,26 @@ class PipelineRunner:
         self._context_enrich_limit = 5
         self._image_enrich_limit = 5
 
+    def _log_step(self, author: AuthorRecord, step: str, **fields: object) -> None:
+        extra = " ".join(f"{key}={value}" for key, value in fields.items() if value is not None)
+        if extra:
+            logger.info(
+                "pipeline_step run_id=%s author_id=%s display_name=%r step=%s %s",
+                self._run_store.run_id,
+                author.author_id,
+                author.display_name,
+                step,
+                extra,
+            )
+            return
+        logger.info(
+            "pipeline_step run_id=%s author_id=%s display_name=%r step=%s",
+            self._run_store.run_id,
+            author.author_id,
+            author.display_name,
+            step,
+        )
+
     @property
     def stats(self) -> Counter[str]:
         return self._stats
@@ -54,17 +74,21 @@ class PipelineRunner:
 
     def _process(self, author: AuthorRecord) -> PipelineResult:
         existing_avatar = self._repo.get_author_avatar_record(author.author_id)
-        logger.info("pipeline_candidate_discovery_start run_id=%s author_id=%s provider_mode=qwen", self._run_store.run_id, author.author_id)
+        self._log_step(author, "load_author", has_existing_avatar=bool(existing_avatar))
+        self._log_step(author, "qwen_search_start", provider_mode="qwen")
 
         outcome = self._web_search.search_author(author)
+        self._log_step(
+            author,
+            "qwen_search_done",
+            profile_pages=len(outcome.profile_pages),
+            image_candidates=len(outcome.image_candidates),
+            filtered_candidates=len(outcome.filtered_candidates),
+            failure_reason=outcome.failure_reason,
+        )
         if not outcome.candidates:
             failure_reason = outcome.failure_reason or "qwen_no_candidates"
-            logger.info(
-                "pipeline_candidate_discovery_empty run_id=%s author_id=%s reason=%s",
-                self._run_store.run_id,
-                author.author_id,
-                failure_reason,
-            )
+            self._log_step(author, "qwen_search_empty", failure_reason=failure_reason)
             return PipelineResult(
                 author_id=author.author_id,
                 status="no_image",
@@ -77,18 +101,24 @@ class PipelineRunner:
                 response_text=outcome.response_text,
             )
 
+        self._log_step(author, "normalize_candidates", candidates=len(outcome.candidates))
         candidates = self._web_search.enrich_candidates_context(outcome.candidates, limit=self._context_enrich_limit)
+        self._log_step(author, "enrich_context_done", candidates=len(candidates))
         candidates = self._web_search.enrich_candidates_image_metadata(
             candidates,
             limit=self._image_enrich_limit,
             allowed_mime=self._config.allowed_mime,
             min_edge_px=self._config.min_image_edge_px,
         )
+        self._log_step(author, "enrich_image_metadata_done", candidates=len(candidates))
         candidates = self._web_search.cluster_candidates(candidates, fingerprint_top_n=8)
+        self._log_step(author, "dedupe_cluster_done", candidates=len(candidates))
         ranked = self._rank_candidates(author, candidates)
+        self._log_step(author, "select_best_candidate_start", ranked=len(ranked))
         selected = self._select_candidate(ranked)
         if selected is None:
             failure_reason = outcome.failure_reason or "no_ranked_candidates"
+            self._log_step(author, "select_best_candidate_empty", failure_reason=failure_reason)
             return PipelineResult(
                 author_id=author.author_id,
                 status="no_image",
@@ -102,8 +132,16 @@ class PipelineRunner:
             )
 
         selected_dict = self._candidate_to_dict(selected)
+        self._log_step(
+            author,
+            "select_best_candidate_done",
+            source_url=selected.source_url,
+            image_url=selected.image_url,
+            is_valid_image=selected.is_valid_image,
+        )
         if selected.is_valid_image is False:
             failure_reason = selected.invalid_reason or "invalid_image"
+            self._log_step(author, "selected_candidate_invalid", failure_reason=failure_reason)
             return PipelineResult(
                 author_id=author.author_id,
                 status="invalid_image",
@@ -118,6 +156,7 @@ class PipelineRunner:
                 response_text=outcome.response_text,
             )
 
+        self._log_step(author, "prepare_upload_start", image_url=selected.image_url)
         image_bytes, actual_mime = self._web_search.download_image(selected.image_url)
         candidate = ImageCandidate(
             commons_file=selected.source_url,
@@ -134,6 +173,7 @@ class PipelineRunner:
             self._config.min_image_edge_px,
         )
         if not is_valid:
+            self._log_step(author, "prepare_upload_invalid", failure_reason=image_error)
             return PipelineResult(
                 author_id=author.author_id,
                 status="invalid_image",
@@ -150,6 +190,7 @@ class PipelineRunner:
 
         sha256 = sha256_hex(image_bytes)
         if existing_avatar and existing_avatar.get("content_sha256") == sha256 and existing_avatar.get("oss_object_key"):
+            self._log_step(author, "reuse_existing_avatar", content_sha256=sha256, oss_url=existing_avatar.get("oss_url"))
             return PipelineResult(
                 author_id=author.author_id,
                 status="ok",
@@ -165,8 +206,10 @@ class PipelineRunner:
                 response_text=outcome.response_text,
             )
 
+        self._log_step(author, "upload_oss_start", content_sha256=sha256)
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, actual_mime)
         oss_url = self._oss.upload(object_key, image_bytes, actual_mime)
+        self._log_step(author, "upload_oss_done", oss_url=oss_url)
         result = PipelineResult(
             author_id=author.author_id,
             status="ok",
@@ -181,7 +224,9 @@ class PipelineRunner:
             raw_content=outcome.raw_content,
             response_text=outcome.response_text,
         )
+        self._log_step(author, "upsert_authors_avatars_start")
         self._repo.upsert_result(result)
+        self._log_step(author, "upsert_authors_avatars_done", oss_url=result.oss_url)
         logger.info(
             "pipeline_result run_id=%s author_id=%s status=%s source_url=%s oss_url=%s",
             self._run_store.run_id,
