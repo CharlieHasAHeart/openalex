@@ -20,6 +20,8 @@ Environment=PROGRESS_EVERY=10
 Environment=LOG_LEVEL=INFO
 Environment=AUTHOR_LIMIT=0
 Environment=AUTHOR_OFFSET=0
+Environment=QWEN_TIMEOUT_SECONDS=120
+Environment=QWEN_MIN_CALL_INTERVAL_SECONDS=1.0
 
 [Install]
 WantedBy=default.target

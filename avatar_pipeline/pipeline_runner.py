@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections import Counter
 
 from avatar_pipeline.avatar_gate import validate_image_candidate
@@ -108,14 +109,22 @@ class PipelineRunner:
     def _process(self, author: AuthorRecord) -> PipelineResult:
         existing_avatar = self._repo.get_author_avatar_record(author.author_id)
         self._log_step(author, "load_author", has_existing_avatar=bool(existing_avatar))
-        self._log_step(author, "qwen_search_image_start", provider_mode="qwen_web_search_image")
+        max_attempts = 2
+        attempt = 1
+        self._log_step(author, "qwen_search_image_start", provider_mode="qwen_web_search_image", attempt=attempt, max_attempts=max_attempts)
         outcome = self._web_search.search_author(author)
+        while outcome.failure_reason == "qwen_request_timeout" and attempt < max_attempts:
+            attempt += 1
+            self._log_step(author, "qwen_search_image_retry", failure_reason=outcome.failure_reason, attempt=attempt, max_attempts=max_attempts)
+            time.sleep(3)
+            outcome = self._web_search.search_author(author)
         self._log_step(
             author,
             "qwen_search_image_done",
             image_candidates=len(outcome.image_candidates),
             filtered_candidates=len(outcome.filtered_candidates),
             failure_reason=outcome.failure_reason,
+            attempts=attempt,
         )
         if not outcome.candidates:
             failure_reason = outcome.failure_reason or "qwen_web_search_image_no_candidates"
@@ -205,4 +214,3 @@ class PipelineRunner:
         self._repo.upsert_result(result)
         self._log_step(author, "upsert_authors_avatars_done", oss_url=result.oss_url)
         return result
-

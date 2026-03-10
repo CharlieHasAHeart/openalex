@@ -5,6 +5,7 @@ import logging
 import re
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,17 @@ from avatar_pipeline.models import AuthorRecord
 logger = logging.getLogger(__name__)
 _QWEN_CALL_LOCK = threading.Lock()
 _QWEN_LAST_CALL_TS = 0.0
+
+warnings.filterwarnings(
+    "ignore",
+    message=r".*PydanticSerializationUnexpectedValue.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module=r"pydantic\.main",
+)
 
 
 @dataclass(slots=True)
@@ -240,7 +252,12 @@ class QwenToolsClient:
                 "enable_thinking": False,
             },
         )
-        data = response.model_dump() if hasattr(response, "model_dump") else {}
+        if hasattr(response, "to_dict"):
+            data = response.to_dict()
+        elif hasattr(response, "model_dump"):
+            data = response.model_dump(warnings=False)
+        else:
+            data = {}
         return data if isinstance(data, dict) else {}, "json_object"
 
     def _exception_response_text(self, exc: Exception) -> str | None:
@@ -308,4 +325,3 @@ class QwenToolsClient:
             response_text=(response_text or "")[:4000] or None,
             response_format_mode=response_mode,
         )
-
