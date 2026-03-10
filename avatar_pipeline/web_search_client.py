@@ -97,6 +97,7 @@ class WebSearchClient:
         qwen_response_path: str,
         qwen_model: str,
         qwen_timeout_seconds: int,
+        qwen_min_call_interval_seconds: float,
         qwen_enable_web_search: bool,
         qwen_min_confidence: float,
     ) -> None:
@@ -110,6 +111,7 @@ class WebSearchClient:
             base_url=qwen_base_url,
             model=qwen_model,
             timeout_seconds=qwen_timeout_seconds,
+            min_call_interval_seconds=qwen_min_call_interval_seconds,
             enable_web_search=qwen_enable_web_search,
             min_confidence=qwen_min_confidence,
             response_path=qwen_response_path,

@@ -107,6 +107,7 @@ def _create_runner(config, limiter, run_store):
         qwen_response_path=config.qwen_response_path,
         qwen_model=config.qwen_model,
         qwen_timeout_seconds=config.qwen_timeout_seconds,
+        qwen_min_call_interval_seconds=config.qwen_min_call_interval_seconds,
         qwen_enable_web_search=config.qwen_enable_web_search,
         qwen_min_confidence=config.qwen_min_confidence,
     )
@@ -291,6 +292,7 @@ def main() -> int:
             "qwen_enable_web_search": config.qwen_enable_web_search,
             "qwen_min_confidence": config.qwen_min_confidence,
             "qwen_max_candidates": config.qwen_max_candidates,
+            "qwen_min_call_interval_seconds": config.qwen_min_call_interval_seconds,
         },
     )
     resume_processed = run_store.processed_author_ids()

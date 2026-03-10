@@ -89,6 +89,7 @@ Qwen：
 - `QWEN_MAX_CANDIDATES`，默认 `8`
 - `QWEN_MIN_CONFIDENCE`，默认 `0.55`
 - `QWEN_TIMEOUT_SECONDS`，默认 `30`
+- `QWEN_MIN_CALL_INTERVAL_SECONDS`，默认 `0`；设置后会在两次 Qwen `/responses` 调用之间强制休眠指定秒数
 
 通用：
 

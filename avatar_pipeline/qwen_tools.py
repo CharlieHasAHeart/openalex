@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +14,8 @@ from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
 
 logger = logging.getLogger(__name__)
+_QWEN_CALL_LOCK = threading.Lock()
+_QWEN_LAST_CALL_TS = 0.0
 
 
 @dataclass(slots=True)
@@ -48,6 +52,7 @@ class QwenToolsClient:
         base_url: str,
         model: str,
         timeout_seconds: int,
+        min_call_interval_seconds: float,
         enable_web_search: bool,
         min_confidence: float,
         response_path: str = "/responses",
@@ -57,6 +62,7 @@ class QwenToolsClient:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout_seconds = max(5, timeout_seconds)
+        self._min_call_interval_seconds = max(0.0, float(min_call_interval_seconds))
         self._enable_web_search = enable_web_search
         self._min_confidence = max(0.0, min(1.0, min_confidence))
         self._response_path = response_path if response_path.startswith("/") else f"/{response_path}"
@@ -259,6 +265,16 @@ class QwenToolsClient:
         del timeout_seconds, max_retries
         if self._client is None:
             raise RuntimeError("qwen client not initialized")
+        if self._min_call_interval_seconds > 0:
+            global _QWEN_LAST_CALL_TS
+            with _QWEN_CALL_LOCK:
+                now = time.monotonic()
+                delta = now - _QWEN_LAST_CALL_TS
+                if delta < self._min_call_interval_seconds:
+                    sleep_seconds = self._min_call_interval_seconds - delta
+                    logger.debug("qwen_call_sleep seconds=%.3f", sleep_seconds)
+                    time.sleep(sleep_seconds)
+                _QWEN_LAST_CALL_TS = time.monotonic()
         model = payload.get("model") or self._model
         input_payload = payload.get("input") or []
         extra_body: dict[str, Any] = {}

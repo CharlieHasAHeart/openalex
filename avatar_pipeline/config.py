@@ -88,6 +88,7 @@ class PipelineConfig:
     qwen_max_candidates: int
     qwen_min_confidence: float
     qwen_timeout_seconds: int
+    qwen_min_call_interval_seconds: float
 
     @classmethod
     def from_env(cls) -> "PipelineConfig":
@@ -126,4 +127,5 @@ class PipelineConfig:
             qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "8")),
             qwen_min_confidence=float(_get_env("QWEN_MIN_CONFIDENCE", "0.55")),
             qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "30")),
+            qwen_min_call_interval_seconds=float(_get_env("QWEN_MIN_CALL_INTERVAL_SECONDS", "0")),
         )
