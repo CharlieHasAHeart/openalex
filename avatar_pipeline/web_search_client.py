@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from html import unescape
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
@@ -45,6 +45,9 @@ class SearchCandidate:
     supporting_source_domains: list[str] | None = None
     content_deduped: bool | None = None
     cluster_evidence_summary: str | None = None
+    linked_profile_url: str | None = None
+    linked_profile_domain: str | None = None
+    link_strength: float | None = None
 
 
 @dataclass(slots=True)
@@ -114,22 +117,21 @@ class WebSearchClient:
         self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen", "reason_tags": []}
 
     def provider_mode(self) -> str:
-        return "qwen"
+        return "qwen_two_stage"
 
     def last_search_diagnostics(self) -> dict[str, Any]:
         return dict(self._last_search_diagnostics)
 
+    def _clean_text(self, value: str | None) -> str | None:
+        if not value:
+            return None
+        text = re.sub(r"<[^>]+>", " ", value)
+        text = " ".join(unescape(text).split())
+        return text or None
+
     def _normalize_source_type(self, raw: str) -> str:
         value = (raw or "").strip().lower()
-        if value in {
-            "institution_profile",
-            "institution_directory",
-            "lab_people_page",
-            "conference_bio",
-            "generic_search_result",
-            "t2i_result",
-            "qwen_verified_profile_image",
-        }:
+        if value in {"institution_profile", "institution_directory", "lab_people_page", "conference_bio", "generic_search_result", "t2i_result", "qwen_verified_profile_image"}:
             return value
         if any(token in value for token in ("faculty", "profile", "staff", "person")):
             return "institution_profile"
@@ -158,7 +160,77 @@ class WebSearchClient:
             return 0.35
         return 0.0
 
-    def _build_candidate(self, author: AuthorRecord, item: dict[str, Any]) -> SearchCandidate | None:
+    def _profile_domain(self, url: str) -> str:
+        return (urlparse(url).hostname or "").lower()
+
+    def _profile_page_score(self, row: dict[str, Any]) -> float:
+        url = str(row.get("url") or "").strip()
+        source_type = str(row.get("source_type") or "").strip().lower()
+        reason = str(row.get("reason") or "").lower()
+        title = str(row.get("title") or "").lower()
+        snippet = str(row.get("snippet") or "").lower()
+        confidence = float(row.get("confidence") or 0.0)
+        domain = self._profile_domain(url)
+        score = confidence
+        if "orcid.org" in domain:
+            score += 0.3
+        if domain.endswith(".edu") or ".edu." in domain:
+            score += 0.25
+        if source_type in {"institution_profile", "institution_directory"}:
+            score += 0.2
+        if any(token in url.lower() for token in ("/faculty/", "/profile/", "/staff/", "/person/", "/people/", "/member/", "/bio/")):
+            score += 0.2
+        if any(token in (title + " " + snippet + " " + reason) for token in ("faculty", "staff", "profile", "researcher", "professor", "orcid")):
+            score += 0.1
+        if any(token in url.lower() for token in ("/news", "/publication", "/paper", "/event", "/article")):
+            score -= 0.5
+        return score
+
+    def _keep_profile_pages(self, profile_pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        deduped: dict[str, dict[str, Any]] = {}
+        for row in profile_pages:
+            url = str(row.get("url") or "").strip()
+            if not url:
+                continue
+            score = self._profile_page_score(row)
+            if score < 0.9:
+                continue
+            existing = deduped.get(url)
+            if existing is None or self._profile_page_score(existing) < score:
+                deduped[url] = row
+        kept = sorted(deduped.values(), key=self._profile_page_score, reverse=True)
+        return kept[:6]
+
+    def _link_candidate_to_profiles(self, candidate: SearchCandidate, profile_pages: list[dict[str, Any]]) -> SearchCandidate:
+        source_domain = (urlparse(candidate.source_url).hostname or "").lower()
+        title_blob = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.source_url]).lower()
+        best_url = None
+        best_domain = None
+        best_score = -999.0
+        for page in profile_pages:
+            page_url = str(page.get("url") or "").strip()
+            page_domain = self._profile_domain(page_url)
+            score = 0.0
+            if source_domain and source_domain == page_domain:
+                score += 1.5
+            if candidate.source_url.rstrip("/") == page_url.rstrip("/"):
+                score += 2.0
+            if page_domain and page_domain in candidate.source_url.lower():
+                score += 0.3
+            if page_url and page_url.lower() in title_blob:
+                score += 1.0
+            if any(tok in title_blob for tok in ("profile", "faculty", "staff", "person", "headshot", "portrait")):
+                score += 0.2
+            if score > best_score:
+                best_score = score
+                best_url = page_url
+                best_domain = page_domain
+        candidate.linked_profile_url = best_url
+        candidate.linked_profile_domain = best_domain
+        candidate.link_strength = best_score if best_score > -999.0 else None
+        return candidate
+
+    def _build_candidate(self, author: AuthorRecord, item: dict[str, Any], profile_pages: list[dict[str, Any]]) -> SearchCandidate | None:
         image_url = str(item.get("image_url") or "").strip()
         source_url = str(item.get("source_url") or "").strip()
         if not image_url.startswith("http") or not source_url.startswith("http"):
@@ -169,82 +241,88 @@ class WebSearchClient:
             return None
         if confidence < self._min_confidence:
             return None
-        title = str(item.get("title") or "").strip()
-        snippet = str(item.get("snippet") or "").strip()
-        source_type = self._normalize_source_type(str(item.get("source_type") or ""))
-        source_domain = urlparse(source_url).hostname
-        reason = str(item.get("reason") or "").strip()
-        discovery_evidence = f"qwen_filtered(conf={confidence:.2f})"
-        if reason:
-            discovery_evidence += f"; reason={reason}"
-        return SearchCandidate(
+        candidate = SearchCandidate(
             image_url=image_url,
             source_url=source_url,
-            title=title,
-            snippet=snippet,
+            title=str(item.get("title") or "").strip(),
+            snippet=str(item.get("snippet") or "").strip(),
             mime=_guess_mime_from_url(image_url),
-            source_domain=source_domain,
-            source_type=source_type,
+            source_domain=urlparse(source_url).hostname,
+            source_type=self._normalize_source_type(str(item.get("source_type") or "")),
             discovery_score=2.0 + min(confidence, 1.0),
-            discovery_evidence=discovery_evidence,
-            page_title=title or None,
+            discovery_evidence=f"qwen_stage2(conf={confidence:.2f}); reason={str(item.get('reason') or '').strip()}",
+            page_title=str(item.get("title") or "").strip() or None,
             image_alt=self._clean_text(str(item.get("image_alt") or "")),
             nearby_text=self._clean_text(str(item.get("nearby_text") or "")),
         )
+        return self._link_candidate_to_profiles(candidate, profile_pages)
 
     def search_author(self, author: AuthorRecord) -> SearchOutcome:
-        logger.info("qwen_provider_prompt_triggered author_id=%s model=%s", author.author_id, self._qwen_tools.model)
-        result = self._qwen_tools.search_author(author, max_candidates=self._max_candidates)
-        candidates: list[SearchCandidate] = []
-        reason_tags: set[str] = set()
-        if result.failure_reason:
-            reason_tags.add(result.failure_reason)
-        if not result.profile_pages:
-            reason_tags.add("qwen_no_profile_pages")
-        if not result.image_candidates:
-            reason_tags.add("qwen_no_image_candidates")
-        if not result.filtered_candidates:
-            reason_tags.add("qwen_empty_filtered_candidates")
-        for row in result.filtered_candidates:
+        logger.info("qwen_two_stage_profile_start author_id=%s model=%s", author.author_id, self._qwen_tools.model)
+        stage1 = self._qwen_tools.search_profile_pages(author)
+        trusted_profile_pages = self._keep_profile_pages(stage1.profile_pages)
+        if not trusted_profile_pages:
+            failure_reason = stage1.failure_reason or "qwen_no_trusted_profile_pages"
+            self._last_search_diagnostics = {"provider_mode": "qwen_two_stage", "reason_tags": [failure_reason], "profile_pages_count": len(stage1.profile_pages), "trusted_profile_pages_count": 0}
+            return SearchOutcome(
+                profile_pages=[],
+                image_candidates=[],
+                filtered_candidates=[],
+                candidates=[],
+                failure_reason=failure_reason,
+                reason_tags=[failure_reason],
+                raw_content=stage1.raw_content,
+                response_text=stage1.response_text,
+            )
+
+        logger.info("qwen_two_stage_profile_done author_id=%s trusted_profile_pages=%s", author.author_id, len(trusted_profile_pages))
+        stage2 = self._qwen_tools.search_images_from_profiles(author, trusted_profile_pages, max_candidates=self._max_candidates)
+
+        all_rows = stage2.filtered_candidates or stage2.image_candidates
+        raw_candidates: list[SearchCandidate] = []
+        for row in all_rows:
             if not isinstance(row, dict):
                 continue
-            candidate = self._build_candidate(author, row)
+            candidate = self._build_candidate(author, row, trusted_profile_pages)
             if candidate is not None:
-                candidates.append(candidate)
-            if len(candidates) >= self._max_candidates:
-                break
+                raw_candidates.append(candidate)
+        filtered = self._filter_candidates_by_profile_evidence(raw_candidates)
+        filtered.sort(key=self._local_candidate_score, reverse=True)
+        kept = filtered[: self._max_candidates]
+
+        failure_reason = stage2.failure_reason
+        if not kept:
+            failure_reason = failure_reason or "qwen_no_strongly_linked_images"
         self._last_search_diagnostics = {
-            "provider_mode": "qwen",
-            "reason_tags": sorted(reason_tags),
-            "profile_pages_count": len(result.profile_pages),
-            "image_candidates_count": len(result.image_candidates),
-            "filtered_candidates_count": len(result.filtered_candidates),
-            "kept_count": len(candidates),
-            "failure_reason": result.failure_reason,
+            "provider_mode": "qwen_two_stage",
+            "reason_tags": [failure_reason] if failure_reason else [],
+            "profile_pages_count": len(stage1.profile_pages),
+            "trusted_profile_pages_count": len(trusted_profile_pages),
+            "image_candidates_count": len(stage2.image_candidates),
+            "filtered_candidates_count": len(stage2.filtered_candidates),
+            "kept_count": len(kept),
         }
-        logger.info(
-            "websearch_provider_summary author_id=%s provider_mode=qwen final_candidates=%s reasons=%s",
-            author.author_id,
-            len(candidates),
-            ",".join(sorted(reason_tags)) if reason_tags else "ok",
-        )
         return SearchOutcome(
-            profile_pages=result.profile_pages,
-            image_candidates=result.image_candidates,
-            filtered_candidates=result.filtered_candidates,
-            candidates=candidates,
-            failure_reason=result.failure_reason,
-            reason_tags=sorted(reason_tags),
-            raw_content=result.raw_content,
-            response_text=result.response_text,
+            profile_pages=trusted_profile_pages,
+            image_candidates=stage2.image_candidates,
+            filtered_candidates=stage2.filtered_candidates,
+            candidates=kept,
+            failure_reason=failure_reason,
+            reason_tags=[failure_reason] if failure_reason else [],
+            raw_content=stage2.raw_content or stage1.raw_content,
+            response_text=stage2.response_text or stage1.response_text,
         )
 
-    def _clean_text(self, value: str | None) -> str | None:
-        if not value:
-            return None
-        text = re.sub(r"<[^>]+>", " ", value)
-        text = " ".join(unescape(text).split())
-        return text or None
+    def _filter_candidates_by_profile_evidence(self, candidates: list[SearchCandidate]) -> list[SearchCandidate]:
+        kept: list[SearchCandidate] = []
+        for candidate in candidates:
+            if (candidate.link_strength or 0.0) < 1.5:
+                continue
+            text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
+            if any(token in text for token in ("logo", "banner", "thumbnail", "group photo", "team photo", "icon")):
+                continue
+            kept.append(candidate)
+        return kept
 
     def _extract_page_context(self, html: str, image_url: str) -> dict[str, str | None]:
         page_title = None
@@ -259,7 +337,6 @@ class WebSearchClient:
         meta_match = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE | re.DOTALL)
         if meta_match:
             meta_description = self._clean_text(meta_match.group(1))
-
         image_alt = None
         nearby_text = None
         chosen_match = None
@@ -279,13 +356,7 @@ class WebSearchClient:
             start = max(chosen_match.start() - 250, 0)
             end = min(chosen_match.end() + 250, len(html))
             nearby_text = self._clean_text(html[start:end])
-        return {
-            "page_title": page_title,
-            "page_h1": page_h1,
-            "page_meta_description": meta_description,
-            "image_alt": image_alt,
-            "nearby_text": nearby_text,
-        }
+        return {"page_title": page_title, "page_h1": page_h1, "page_meta_description": meta_description, "image_alt": image_alt, "nearby_text": nearby_text}
 
     def enrich_candidates_context(self, candidates: list[SearchCandidate], limit: int = 5) -> list[SearchCandidate]:
         for candidate in candidates[: max(0, limit)]:
@@ -297,6 +368,8 @@ class WebSearchClient:
                 candidate.page_meta_description = context.get("page_meta_description")
                 candidate.image_alt = context.get("image_alt") or candidate.image_alt
                 candidate.nearby_text = context.get("nearby_text") or candidate.nearby_text
+                if candidate.linked_profile_domain and (urlparse(candidate.source_url).hostname or "").lower() == candidate.linked_profile_domain:
+                    candidate.link_strength = max(float(candidate.link_strength or 0.0), 2.0)
             except Exception:
                 candidate.page_title = candidate.page_title or candidate.title
         return candidates
@@ -336,11 +409,7 @@ class WebSearchClient:
         return None
 
     def _parse_image_size(self, content: bytes, mime: str) -> tuple[int | None, int | None]:
-        parser_by_mime = {
-            "image/png": self._parse_png_size,
-            "image/jpeg": self._parse_jpeg_size,
-            "image/webp": self._parse_webp_size,
-        }
+        parser_by_mime = {"image/png": self._parse_png_size, "image/jpeg": self._parse_jpeg_size, "image/webp": self._parse_webp_size}
         parser = parser_by_mime.get(mime)
         if parser is None:
             return None, None
@@ -349,13 +418,7 @@ class WebSearchClient:
             return None, None
         return parsed
 
-    def enrich_candidates_image_metadata(
-        self,
-        candidates: list[SearchCandidate],
-        limit: int = 5,
-        allowed_mime: set[str] | None = None,
-        min_edge_px: int = 200,
-    ) -> list[SearchCandidate]:
+    def enrich_candidates_image_metadata(self, candidates: list[SearchCandidate], limit: int = 5, allowed_mime: set[str] | None = None, min_edge_px: int = 200) -> list[SearchCandidate]:
         allowed = allowed_mime or {"image/jpeg", "image/png", "image/webp"}
         for candidate in candidates[: max(0, limit)]:
             try:
@@ -404,14 +467,27 @@ class WebSearchClient:
         filename = re.sub(r"[^a-z0-9.]+", "", filename)
         return filename
 
-    def _candidate_strength(self, candidate: SearchCandidate) -> float:
-        discovery = float(candidate.discovery_score or 0.0)
-        rank = float(candidate.pre_rank_score or 0.0)
-        validity = 0.5 if candidate.is_valid_image else 0.0
-        size_bonus = 0.0
+    def _local_candidate_score(self, candidate: SearchCandidate) -> float:
+        score = float(candidate.discovery_score or 0.0)
+        score += min(float(candidate.link_strength or 0.0), 3.0) * 1.2
+        if candidate.linked_profile_domain and candidate.source_domain == candidate.linked_profile_domain:
+            score += 1.5
+        if candidate.is_valid_image is True:
+            score += 1.0
+        if candidate.is_portrait:
+            score += 0.6
         if candidate.width and candidate.height:
-            size_bonus = min((candidate.width * candidate.height) / 500000.0, 3.0)
-        return discovery + rank + validity + size_bonus
+            score += min((candidate.width * candidate.height) / 600000.0, 2.0)
+        text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
+        if any(token in text for token in ("group", "team", "lab members", "thumbnail", "logo", "icon")):
+            score -= 2.0
+        if candidate.merged_count and candidate.merged_count > 1:
+            score += min((candidate.merged_count - 1) * 0.2, 1.0)
+        candidate.pre_rank_score = score
+        return score
+
+    def _candidate_strength(self, candidate: SearchCandidate) -> float:
+        return self._local_candidate_score(candidate)
 
     def _choose_canonical(self, members: list[SearchCandidate]) -> SearchCandidate:
         if not members:
@@ -428,10 +504,8 @@ class WebSearchClient:
             page_host = urlparse(candidate.source_url).netloc.lower()
             stem = self._file_stem_key(candidate.image_url)
             grouped.setdefault(f"{page_host}|{stem or normalized}", []).append(candidate)
-
         clusters = [CandidateCluster(canonical=self._choose_canonical(members), members=members) for members in grouped.values()]
         clusters.sort(key=lambda cluster: self._candidate_strength(cluster.canonical), reverse=True)
-
         merged: list[CandidateCluster] = []
         fp_map: dict[str, CandidateCluster] = {}
         for index, cluster in enumerate(clusters):
@@ -454,7 +528,6 @@ class WebSearchClient:
             else:
                 existing.members.extend(cluster.members)
                 existing.canonical = self._choose_canonical([existing.canonical, cluster.canonical])
-
         finalized: list[SearchCandidate] = []
         for cluster in merged:
             canonical = self._choose_canonical(cluster.members)
@@ -466,6 +539,8 @@ class WebSearchClient:
             canonical.content_deduped = any(item.image_fingerprint for item in cluster.members if item is not canonical)
             canonical.cluster_evidence_summary = f"merged={len(cluster.members)}, sources={len(domains)}, types={','.join(source_types[:3]) or 'unknown'}"
             finalized.append(canonical)
+        finalized = self._filter_candidates_by_profile_evidence(finalized)
+        finalized.sort(key=self._local_candidate_score, reverse=True)
         return finalized
 
     def download_image(self, url: str) -> tuple[bytes, str]:

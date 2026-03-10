@@ -56,49 +56,51 @@ class QwenToolsClient:
     def model(self) -> str:
         return self._model
 
-    def _build_prompt(self, author: AuthorRecord, max_candidates: int) -> str:
-        author_ctx = {
+    def _build_response_format(self) -> dict[str, Any]:
+        return {"type": "json_object"}
+
+    def _response_url(self) -> str:
+        return f"{self._base_url}{self._response_path}"
+
+    def _author_ctx(self, author: AuthorRecord) -> dict[str, Any]:
+        return {
             "author_id": author.author_id,
             "display_name": author.display_name,
             "orcid": author.orcid,
             "institution_name": author.institution_name,
             "concept_names": author.concept_names or [],
         }
+
+    def _build_profile_prompt(self, author: AuthorRecord) -> str:
         return (
-            "You are an author-avatar candidate discovery engine.\n"
+            "You are stage 1 of a two-stage scholar avatar search pipeline.\n"
+            "Use web_search only.\n"
+            "Goal: return only high-confidence official profile pages for the target author.\n"
+            "Do not search for images.\n"
             "Return exactly one JSON object and nothing else.\n"
-            "Do not wrap JSON in markdown fences.\n"
-            "Do not emit analysis, commentary, or explanatory text.\n"
-            "If evidence is weak, return empty arrays and set failure_reason.\n"
-            "Workflow:\n"
-            "1) Use web_search to find official profile pages (faculty/staff/person/people/team/member/bio).\n"
-            "2) Use t2i_search to find portrait/headshot image candidates.\n"
-            "3) Cross-verify image candidates against profile/source evidence.\n"
-            "4) Return ONLY one JSON object (no markdown, no prose).\n"
-            "Hard exclusions: logo, banner, poster, collage/news montage, social avatar, unclear group photo, non-human image.\n"
-            "Confidence must be float in [0,1].\n"
-            "Output schema:\n"
-            "{"
-            '"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],'
-            '"image_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],'
-            '"filtered_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],'
-            '"failure_reason":""'
-            "}\n"
-            "Constraints:\n"
-            "- Keys must match the schema exactly.\n"
-            "- Use arrays, not null.\n"
-            "- confidence must be numeric.\n"
-            "- source_url/image_url/url must be absolute http(s) URLs.\n"
-            "- additional keys are forbidden.\n"
-            f"`filtered_candidates` is the final list for pipeline consumption (max {max_candidates}).\n"
-            f"Minimum confidence threshold reference: {self._min_confidence:.2f}.\n"
-            f"author={json.dumps(author_ctx, ensure_ascii=False)}"
+            "Preferred pages: faculty/staff/person/people/member/team/bio pages, ORCID page, institutional profile pages.\n"
+            "Reject pages that are news, publications, social media, generic search clutter, login pages, conference listings without person profile evidence.\n"
+            "Only keep profile_pages with confidence >= 0.75.\n"
+            'Schema: {"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],"image_candidates":[],"filtered_candidates":[],"failure_reason":""}\n'
+            "Use arrays, not null. Additional keys are forbidden.\n"
+            f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}"
         )
 
-    def _build_response_format(self) -> dict[str, Any]:
-        return {
-            "type": "json_object",
-        }
+    def _build_image_prompt(self, author: AuthorRecord, profile_pages: list[dict[str, Any]], max_candidates: int) -> str:
+        return (
+            "You are stage 2 of a two-stage scholar avatar search pipeline.\n"
+            "Use t2i_search only.\n"
+            "Goal: find portrait/headshot image candidates constrained by the provided profile page evidence.\n"
+            "Return exactly one JSON object and nothing else.\n"
+            "Every candidate must be strongly linked to one provided profile page or to the same domain as a provided profile page.\n"
+            "Prefer portraits/headshots on official institutional pages. Reject logos, thumbnails, group photos, banners, posters, social avatars, weak-source images.\n"
+            "If no image can be strongly linked back to the profile evidence, return empty arrays and set failure_reason.\n"
+            f"Keep at most {max_candidates} filtered candidates.\n"
+            'Schema: {"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],"image_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"filtered_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"failure_reason":""}\n'
+            "Use arrays, not null. Additional keys are forbidden.\n"
+            f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}\n"
+            f"profile_pages={json.dumps(profile_pages, ensure_ascii=False)}"
+        )
 
     def _extract_json_object(self, content: str) -> dict[str, Any] | None:
         stripped = content.strip()
@@ -134,7 +136,6 @@ class QwenToolsClient:
         output_text = payload.get("output_text")
         if isinstance(output_text, str) and output_text.strip():
             return output_text
-
         output = payload.get("output")
         if isinstance(output, list):
             chunks: list[str] = []
@@ -152,7 +153,6 @@ class QwenToolsClient:
                         chunks.append(text)
             if chunks:
                 return "\n".join(chunks)
-
         choices = payload.get("choices")
         if isinstance(choices, list) and choices:
             content = (((choices[0] or {}).get("message") or {}).get("content") or "")
@@ -165,24 +165,20 @@ class QwenToolsClient:
             return None, False
         url = str(row.get("url") or "").strip()
         source_type = str(row.get("source_type") or "generic_search_result").strip()
-        confidence_raw = row.get("confidence")
         try:
-            confidence = float(confidence_raw)
+            confidence = float(row.get("confidence"))
         except Exception:
             return None, False
-        if not url.startswith("http"):
+        if not url.startswith("http") or not (0.0 <= confidence <= 1.0):
             return None, False
-        if confidence < 0 or confidence > 1:
-            return None, False
-        normalized = {
+        return {
             "url": url,
             "title": str(row.get("title") or "").strip(),
             "snippet": str(row.get("snippet") or "").strip(),
             "source_type": source_type or "generic_search_result",
             "confidence": confidence,
             "reason": str(row.get("reason") or "").strip(),
-        }
-        return normalized, True
+        }, True
 
     def _validate_candidate_item(self, row: object) -> tuple[dict[str, Any] | None, bool]:
         if not isinstance(row, dict):
@@ -190,16 +186,13 @@ class QwenToolsClient:
         image_url = str(row.get("image_url") or "").strip()
         source_url = str(row.get("source_url") or "").strip()
         source_type = str(row.get("source_type") or "t2i_result").strip()
-        confidence_raw = row.get("confidence")
         try:
-            confidence = float(confidence_raw)
+            confidence = float(row.get("confidence"))
         except Exception:
             return None, False
-        if not image_url.startswith("http") or not source_url.startswith("http"):
+        if not image_url.startswith("http") or not source_url.startswith("http") or not (0.0 <= confidence <= 1.0):
             return None, False
-        if confidence < 0 or confidence > 1:
-            return None, False
-        normalized = {
+        return {
             "image_url": image_url,
             "source_url": source_url,
             "title": str(row.get("title") or "").strip(),
@@ -209,23 +202,19 @@ class QwenToolsClient:
             "nearby_text": str(row.get("nearby_text") or "").strip(),
             "confidence": confidence,
             "reason": str(row.get("reason") or "").strip(),
-        }
-        return normalized, True
+        }, True
 
     def _normalize_response_payload(self, obj: dict[str, Any]) -> QwenSearchResult:
         schema_issue_count = 0
-
         profile_rows = obj.get("profile_pages")
+        image_rows = obj.get("image_candidates")
+        filtered_rows = obj.get("filtered_candidates")
         if not isinstance(profile_rows, list):
             profile_rows = []
             schema_issue_count += 1
-
-        image_rows = obj.get("image_candidates")
         if not isinstance(image_rows, list):
             image_rows = []
             schema_issue_count += 1
-
-        filtered_rows = obj.get("filtered_candidates")
         if not isinstance(filtered_rows, list):
             filtered_rows = []
             schema_issue_count += 1
@@ -234,53 +223,37 @@ class QwenToolsClient:
         invalid_profile = 0
         for row in profile_rows:
             normalized, ok = self._validate_profile_page(row)
-            if not ok or normalized is None:
+            if ok and normalized is not None:
+                profile_pages.append(normalized)
+            else:
                 invalid_profile += 1
-                continue
-            profile_pages.append(normalized)
 
         image_candidates: list[dict[str, Any]] = []
         invalid_image = 0
         for row in image_rows:
             normalized, ok = self._validate_candidate_item(row)
-            if not ok or normalized is None:
+            if ok and normalized is not None:
+                image_candidates.append(normalized)
+            else:
                 invalid_image += 1
-                continue
-            image_candidates.append(normalized)
 
         filtered_candidates: list[dict[str, Any]] = []
         invalid_filtered = 0
         for row in filtered_rows:
             normalized, ok = self._validate_candidate_item(row)
-            if not ok or normalized is None:
+            if ok and normalized is not None:
+                filtered_candidates.append(normalized)
+            else:
                 invalid_filtered += 1
-                continue
-            filtered_candidates.append(normalized)
 
         failure_reason = str(obj.get("failure_reason") or "").strip() or None
         allowed_keys = {"profile_pages", "image_candidates", "filtered_candidates", "failure_reason"}
         extra_keys = sorted(set(obj.keys()) - allowed_keys)
         if extra_keys:
             schema_issue_count += len(extra_keys)
-            logger.warning("qwen_schema_extra_keys keys=%s", ",".join(extra_keys))
-        if not filtered_candidates and filtered_rows:
-            failure_reason = failure_reason or "qwen_schema_invalid"
-        if not filtered_candidates and not filtered_rows:
-            failure_reason = failure_reason or "qwen_empty_filtered_candidates"
         if schema_issue_count > 0 and failure_reason is None:
             failure_reason = "qwen_schema_invalid"
 
-        logger.info(
-            "qwen_schema_validation_summary profile_pages=%s image_candidates=%s filtered_candidates=%s invalid_profile=%s invalid_image=%s invalid_filtered=%s schema_issues=%s failure_reason=%s",
-            len(profile_pages),
-            len(image_candidates),
-            len(filtered_candidates),
-            invalid_profile,
-            invalid_image,
-            invalid_filtered,
-            schema_issue_count,
-            failure_reason,
-        )
         return QwenSearchResult(
             profile_pages=profile_pages,
             image_candidates=image_candidates,
@@ -292,130 +265,86 @@ class QwenToolsClient:
             schema_issue_count=schema_issue_count,
         )
 
-    def _response_url(self) -> str:
-        return f"{self._base_url}{self._response_path}"
-
-    def _post_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post_responses(self, payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        resp = self._http.request(
-            "POST",
-            self._response_url(),
-            headers=headers,
-            json=payload,
-            timeout=self._timeout_seconds,
-        )
-        return resp.json()
+        resp = self._http.request("POST", self._response_url(), headers=headers, json=payload, timeout=self._timeout_seconds)
+        return resp.json(), "json_object"
 
-    def search_author(self, author: AuthorRecord, max_candidates: int) -> QwenSearchResult:
-        if not self._api_key:
-            return QwenSearchResult([], [], [], failure_reason="qwen_api_key_missing")
-
-        prompt = self._build_prompt(author, max_candidates=max_candidates)
-        tools: list[dict[str, Any]] = []
-        if self._enable_web_search:
-            tools.append({"type": "web_search"})
-        if self._enable_t2i_search:
-            tools.append({"type": "t2i_search"})
+    def _run_stage(self, *, author: AuthorRecord, prompt: str, tools: list[dict[str, Any]], stage_name: str) -> QwenSearchResult:
         payload: dict[str, Any] = {
             "model": self._model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
-                }
-            ],
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
             "temperature": 0,
+            "tools": tools,
+            "response_format": self._build_response_format(),
         }
-        if tools:
-            payload["tools"] = tools
-        payload["response_format"] = self._build_response_format()
         response_format_mode = "json_object"
-        logger.info(
-            "qwen_request_started author_id=%s model=%s endpoint=%s web_search=%s t2i_search=%s",
-            author.author_id,
-            self._model,
-            self._response_url(),
-            self._enable_web_search,
-            self._enable_t2i_search,
-        )
         try:
-            data = self._post_responses(payload)
+            data, _ = self._post_responses(payload)
         except HTTPError as exc:
             response = getattr(exc, "response", None)
             status_code = response.status_code if response is not None else None
-            response_text = response.text[:2000] if response is not None and response.text else None
+            response_text = response.text[:4000] if response is not None and response.text else None
             if status_code in {400, 404, 422}:
-                logger.warning(
-                    "qwen_response_format_retry author_id=%s status_code=%s error_message=%s",
-                    author.author_id,
-                    status_code,
-                    str(exc),
-                )
+                fallback_payload = dict(payload)
+                fallback_payload.pop("response_format", None)
                 try:
-                    fallback_payload = dict(payload)
-                    fallback_payload.pop("response_format", None)
-                    data = self._post_responses(fallback_payload)
+                    data, _ = self._post_responses(fallback_payload)
                     response_format_mode = "prompt_only_fallback"
-                except HTTPError as fallback_exc:
-                    logger.warning("qwen_http_error author_id=%s error_message=%s", author.author_id, str(fallback_exc))
-                    fallback_response = getattr(fallback_exc, "response", None)
-                    fallback_text = fallback_response.text[:2000] if fallback_response is not None and fallback_response.text else response_text
-                    return QwenSearchResult(
-                        [],
-                        [],
-                        [],
-                        failure_reason="qwen_http_error",
-                        raw_content=fallback_text,
-                        response_text=fallback_text,
-                        response_format_mode=response_format_mode,
-                    )
                 except Exception as fallback_exc:
-                    logger.warning("qwen_request_failed author_id=%s error_message=%s", author.author_id, str(fallback_exc))
-                    return QwenSearchResult(
-                        [],
-                        [],
-                        [],
-                        failure_reason="qwen_request_failed",
-                        raw_content=response_text,
-                        response_text=response_text,
-                        response_format_mode=response_format_mode,
-                    )
+                    logger.warning("%s_failed author_id=%s error_message=%s", stage_name, author.author_id, str(fallback_exc))
+                    return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_request_failed", raw_content=response_text, response_text=response_text, response_format_mode=response_format_mode)
             else:
-                logger.warning("qwen_http_error author_id=%s error_message=%s", author.author_id, str(exc))
-                return QwenSearchResult(
-                    [],
-                    [],
-                    [],
-                    failure_reason="qwen_http_error",
-                    raw_content=response_text,
-                    response_text=response_text,
-                    response_format_mode=response_format_mode,
-                )
+                logger.warning("%s_http_error author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
+                return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_http_error", raw_content=response_text, response_text=response_text, response_format_mode=response_format_mode)
         except Exception as exc:
-            logger.warning("qwen_request_failed author_id=%s error_message=%s", author.author_id, str(exc))
-            return QwenSearchResult([], [], [], failure_reason="qwen_request_failed", response_format_mode=response_format_mode)
+            logger.warning("%s_request_failed author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
+            return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_request_failed", response_format_mode=response_format_mode)
 
         response_text = self._extract_response_text(data if isinstance(data, dict) else {})
         if not response_text:
-            return QwenSearchResult([], [], [], failure_reason="qwen_output_missing", raw_content=json.dumps(data, ensure_ascii=False)[:2000], response_format_mode=response_format_mode)
-
+            return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_output_missing", raw_content=json.dumps(data, ensure_ascii=False)[:4000], response_format_mode=response_format_mode)
         obj = self._extract_json_object(response_text)
         if obj is None:
-            return QwenSearchResult(
-                [],
-                [],
-                [],
-                failure_reason="qwen_output_not_json",
-                raw_content=response_text[:4000],
-                response_text=response_text[:4000],
-                response_format_mode=response_format_mode,
-            )
-
+            return QwenSearchResult([], [], [], failure_reason=f"{stage_name}_output_not_json", raw_content=response_text[:4000], response_text=response_text[:4000], response_format_mode=response_format_mode)
         normalized = self._normalize_response_payload(obj)
         normalized.raw_content = response_text[:4000]
         normalized.response_text = response_text[:4000]
         normalized.response_format_mode = response_format_mode
         return normalized
+
+    def search_profile_pages(self, author: AuthorRecord) -> QwenSearchResult:
+        if not self._api_key:
+            return QwenSearchResult([], [], [], failure_reason="qwen_api_key_missing")
+        logger.info("qwen_profile_stage_started author_id=%s model=%s", author.author_id, self._model)
+        result = self._run_stage(
+            author=author,
+            prompt=self._build_profile_prompt(author),
+            tools=[{"type": "web_search"}] if self._enable_web_search else [],
+            stage_name="qwen_profile_stage",
+        )
+        logger.info("qwen_profile_stage_finished author_id=%s profile_pages=%s failure_reason=%s", author.author_id, len(result.profile_pages), result.failure_reason)
+        return result
+
+    def search_images_from_profiles(self, author: AuthorRecord, profile_pages: list[dict[str, Any]], max_candidates: int) -> QwenSearchResult:
+        if not self._api_key:
+            return QwenSearchResult([], [], [], failure_reason="qwen_api_key_missing")
+        logger.info("qwen_image_stage_started author_id=%s model=%s profile_pages=%s", author.author_id, self._model, len(profile_pages))
+        result = self._run_stage(
+            author=author,
+            prompt=self._build_image_prompt(author, profile_pages, max_candidates=max_candidates),
+            tools=[{"type": "t2i_search"}] if self._enable_t2i_search else [],
+            stage_name="qwen_image_stage",
+        )
+        result.profile_pages = list(profile_pages)
+        logger.info(
+            "qwen_image_stage_finished author_id=%s image_candidates=%s filtered_candidates=%s failure_reason=%s",
+            author.author_id,
+            len(result.image_candidates),
+            len(result.filtered_candidates),
+            result.failure_reason,
+        )
+        return result
