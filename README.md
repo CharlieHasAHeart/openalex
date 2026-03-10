@@ -2,26 +2,21 @@
 
 这个项目现在只保留一条极简头像获取主流程：
 
-`load author -> qwen web_search 找相关网页 -> 本地解析网页 HTML 抽图 -> 本地筛选/校验/聚类/重排 -> 候选列表交给 LLM 选图 -> upload oss -> upsert public.authors_avatars -> write local run record`
+`load author -> qwen web_search_image -> 提取 extracted_urls -> 默认取第1张 -> upload oss -> upsert public.authors_avatars -> write local run record`
 
 ## 当前架构
 
 - 搜索与候选发现只使用 `qwen3.5-plus Responses API`
-- Qwen 只使用 `web_search` 返回相关网页证据
-- `image_candidates` / `filtered_candidates` 由本地代码生成，不再依赖 Qwen 生成图片候选
-- 最终候选由 LLM 在候选列表中直接选择，并返回简洁选择理由
-- 本地不再进行候选打分排序，避免中间启发式分数干预最终选图
+- Qwen 只使用 `web_search_image`
+- `image_candidates` / `filtered_candidates` 来自 `web_search_image` 返回并本地去重
+- 主链默认使用 `extracted_urls` 的第 1 张作为候选头像
 - 保留 Qwen 输出 schema 校验，固定输出字段：
   - `profile_pages`
   - `image_candidates`
   - `filtered_candidates`
   - `failure_reason`
-- 本地还会做硬校验与重排：
-  - 优先同域
-  - 优先可回链到可信网页的图片
-  - 校验图片尺寸、mime、portrait 特征
-  - 降权 group photo、logo、thumbnail、弱来源图片
-- 如果没有可信网页，或网页里抽不到强相关图片，则保守失败
+- 本地会做最小图片可用性校验（mime、可下载、尺寸可解析）
+- 如果 `web_search_image` 没有返回可用 URL，则保守失败
 - 数据库只使用：
   - 作者源数据读取
   - `public.authors_avatars` 查询
@@ -32,26 +27,22 @@
 
 ```mermaid
 flowchart TD
-    A[Load author from authors_analysis] --> B[Qwen web_search: profile_pages]
-    B --> C{Trusted profile_pages?}
-    C -- No --> Z1[Fail: qwen_no_trusted_profile_pages]
-    C -- Yes --> D[Fetch HTML and extract img candidates]
-    D --> E{HTML candidates strong enough?}
-    E -- Yes --> G[Local enrich + metadata check + dedupe + rerank]
-    E -- No --> Z2[Fail: no_strong_candidate]
-    G --> H[LLM select best candidate]
-    H --> I{Local image valid?}
-    I -- No --> Z3[Fail: invalid_image]
-    I -- Yes --> L[Upload OSS]
-    L --> M[Upsert public.authors_avatars]
-    M --> N[Write runs summary/author/failures]
+    A[Load author from authors_analysis] --> B[Qwen web_search_image]
+    B --> C{extracted_urls non-empty?}
+    C -- No --> Z1[Fail: qwen_web_search_image_no_candidates]
+    C -- Yes --> D[Select first extracted url]
+    D --> E{Image downloadable and valid mime?}
+    E -- No --> Z2[Fail: invalid_image]
+    E -- Yes --> F[Upload OSS]
+    F --> G[Upsert public.authors_avatars]
+    G --> H[Write runs summary/author/successes/failures]
 ```
 
 ## 目录
 
 - `main.py`: 极简 CLI 入口
-- `avatar_pipeline/qwen_tools.py`: Qwen `web_search` 调用与 schema 校验
-- `avatar_pipeline/web_search_client.py`: 网页筛选、HTML 抽图、本地相关性筛选、页面上下文补全、图片元数据补全、候选聚类
+- `avatar_pipeline/qwen_tools.py`: Qwen `web_search_image` 调用与 URL 提取
+- `avatar_pipeline/web_search_client.py`: 候选组装、去重、下载缓存、图片元数据读取
 - `avatar_pipeline/pipeline_runner.py`: 线性主流程编排
 - `avatar_pipeline/pg_repository.py`: 作者读取 + `authors_avatars` 查询/upsert
 - `avatar_pipeline/local_run_store.py`: 本地运行日志落盘
@@ -85,7 +76,7 @@ Qwen：
 - `LLM_BASE_URL`（或 `QWEN_BASE_URL`）
 - `LLM_MODEL`（或 `QWEN_MODEL`）
 - `QWEN_RESPONSE_PATH`，默认 `/responses`
-- `QWEN_ENABLE_WEB_SEARCH`，默认 `true`
+- `QWEN_ENABLE_WEB_SEARCH`，默认 `true`（此处用于启用 `web_search_image` 工具调用）
 - `QWEN_MAX_CANDIDATES`，默认 `8`
 - `QWEN_MIN_CONFIDENCE`，默认 `0.55`
 - `QWEN_TIMEOUT_SECONDS`，默认 `30`
@@ -157,13 +148,9 @@ python3 main.py --author-ids-file author_ids.json --workers 1 --progress-every 1
 运行日志会按 author 打出关键步骤：
 
 - `load_author`
-- `qwen_search_start`
-- `qwen_search_done`
-- `normalize_candidates`
-- `enrich_context_done`
-- `enrich_image_metadata_done`
-- `dedupe_cluster_done`
-- `llm_select_candidate_done`
+- `qwen_search_image_start`
+- `qwen_search_image_done`
+- `select_first_extracted_url`
 - `upload_oss_done`
 - `upsert_authors_avatars_done`
 
@@ -181,22 +168,18 @@ python3 main.py --author-ids-file author_ids.json --workers 1 --progress-every 1
 - `runs/<date>/<run_id>/failures.jsonl`
 - 失败记录里的 `final_status`、`failure_reason`
 - 如果是 Qwen 输出/结构化失败，重点看 `raw_content` 和 `response_text`
-- 如果网页证据不足，通常会看到没有可信 `profile_pages`
-- 如果 HTML 抽图失败，通常会看到 `html_no_image_candidates` 或 `html_no_strong_candidate`
+- 如果 `web_search_image` 无结果，通常会看到 `qwen_web_search_image_no_candidates`
 - 如果是图片问题，重点看 `selected_candidate.invalid_reason`
 - 终端日志里最后停留的 `pipeline_step`
 
 ## 单链路验证
 
-验证“只剩 web_search + HTML 抽图”是否生效：
+验证“只剩 web_search_image”是否生效：
 
 1. 运行单作者测试。
-2. 在日志中确认只有网页搜索与本地候选处理，没有任何 `stage1` / `stage2` / `t2i_search` 日志。
-3. 检查 `author_runs.jsonl`：
-   - `profile_pages` 应来自 Qwen `web_search`
-   - `image_candidates` 应为本地从网页 HTML 抽出的图片
-   - `filtered_candidates` 应为本地筛选/聚类后的图片
-4. 如果找不到可信网页或强相关图片，流程应保守失败，不强行产图。
+2. 在日志中确认出现 `qwen_web_search_image_started/qwen_web_search_image_finished`。
+3. 检查 `author_runs.jsonl`：`image_candidates` / `filtered_candidates` 应直接来自 `web_search_image` 输出。
+4. `selected_candidate.image_url` 应等于该作者 `filtered_candidates` 的第 1 条 URL。
 
 ## 本地运行日志
 
