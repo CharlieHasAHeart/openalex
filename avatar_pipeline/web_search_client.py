@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from html import unescape
 from typing import Any
@@ -10,7 +11,7 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
-from avatar_pipeline.qwen_tools import QwenAvatarReviewResult, QwenToolsClient
+from avatar_pipeline.qwen_tools import QwenAvatarSelectionResult, QwenToolsClient
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ class WebSearchClient:
             response_path=qwen_response_path,
         )
         self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen", "reason_tags": []}
+        self._profile_fetch_workers = 3
 
     def provider_mode(self) -> str:
         return "qwen"
@@ -214,7 +216,7 @@ class WebSearchClient:
             score += 0.08
         if any(token in (title + " " + snippet + " " + reason) for token in ("faculty", "staff", "profile", "researcher", "professor", "orcid")):
             score += 0.1
-        if any(token in url.lower() for token in ("/news", "/publication", "/paper", "/event", "/article")):
+        if any(token in url.lower() for token in ("/publication", "/paper")):
             score -= 0.5
         return score
 
@@ -241,13 +243,13 @@ class WebSearchClient:
             if not url:
                 continue
             score = self._profile_page_author_score(author, row)
-            if score < 0.9:
+            if score < 0.55:
                 continue
             existing = deduped.get(url)
             if existing is None or self._profile_page_author_score(author, existing) < score:
                 deduped[url] = row
         kept = sorted(deduped.values(), key=lambda row: self._profile_page_author_score(author, row), reverse=True)
-        return kept[:6]
+        return kept[:8]
 
     def _link_candidate_to_profiles(self, candidate: SearchCandidate, profile_pages: list[dict[str, Any]]) -> SearchCandidate:
         source_domain = (urlparse(candidate.source_url).hostname or "").lower()
@@ -307,17 +309,11 @@ class WebSearchClient:
             if not raw_src or raw_src.startswith("data:") or "{{" in raw_src or "}}" in raw_src:
                 continue
             image_url = urljoin(source_url, raw_src)
-            lower_src = image_url.lower()
-            if any(token in lower_src for token in ("loading.", "spinner", "logo", "banner", "icon", "sprite", "favicon", "thumbnail", "thumb", "/bnr_", "bnr-")):
-                continue
             alt_match = re.search(r'alt=["\']([^"\']*)["\']', tag, re.IGNORECASE)
             image_alt = self._clean_text(alt_match.group(1)) if alt_match else None
             start = max(match.start() - 250, 0)
             end = min(match.end() + 250, len(html))
             nearby_text = self._clean_text(html[start:end])
-            tag_blob = " ".join(filter(None, [tag, image_alt or "", nearby_text or ""])).lower()
-            if any(token in tag_blob for token in ("bnr_", "banner", "site-title", "loading", "spinner", "footer", "navbar", "nav-", "breadcrumb")):
-                continue
             candidate = SearchCandidate(
                 image_url=image_url,
                 source_url=source_url,
@@ -435,62 +431,6 @@ class WebSearchClient:
             "reason": candidate.discovery_evidence or "",
         }
 
-    def _build_image_search_candidate(self, row: dict[str, Any], profile_pages: list[dict[str, Any]]) -> SearchCandidate | None:
-        image_url = str(row.get("image_url") or "").strip()
-        if not image_url.startswith("http"):
-            return None
-        source_url = str(row.get("source_url") or "").strip() or image_url
-        candidate = SearchCandidate(
-            image_url=image_url,
-            source_url=source_url,
-            title=str(row.get("title") or "").strip(),
-            snippet=str(row.get("snippet") or "").strip(),
-            mime=_guess_mime_from_url(image_url),
-            source_domain=(urlparse(source_url).hostname or urlparse(image_url).hostname or "").lower() or None,
-            source_type="web_search_image",
-            discovery_score=0.9,
-            discovery_evidence="qwen_web_search_image_fallback",
-            page_title=str(row.get("title") or "").strip() or None,
-        )
-        return self._link_candidate_to_profiles(candidate, profile_pages)
-
-    def _search_image_fallback(self, author: AuthorRecord, profile_pages: list[dict[str, Any]]) -> tuple[list[SearchCandidate], list[dict[str, Any]], list[dict[str, Any]], str | None]:
-        image_result = self._qwen_tools.search_images(author, profile_pages)
-        raw_candidates: list[SearchCandidate] = []
-        for row in image_result.image_results:
-            candidate = self._build_image_search_candidate(row, profile_pages)
-            if candidate is not None:
-                raw_candidates.append(candidate)
-        if not raw_candidates:
-            return [], [], [], image_result.failure_reason or "web_search_image_no_candidates"
-
-        image_candidate_rows = [self._candidate_to_row(candidate) for candidate in raw_candidates[:100]]
-        enriched = self.enrich_candidates_context(raw_candidates, limit=min(len(raw_candidates), 12))
-        enriched = self.enrich_candidates_image_metadata(enriched, limit=min(len(enriched), 12))
-
-        filtered: list[SearchCandidate] = []
-        for candidate in enriched:
-            same_profile_domain = bool(candidate.linked_profile_domain and candidate.source_domain == candidate.linked_profile_domain)
-            if (candidate.link_strength or 0.0) < 1.5 and not same_profile_domain:
-                continue
-            name_score = self._candidate_name_relevance(author, candidate)
-            institution_score = self._candidate_institution_relevance(author, candidate)
-            if max(name_score, institution_score) < 0.35 and not same_profile_domain:
-                continue
-            if self._candidate_is_institutional_asset(candidate) and not self._candidate_has_person_evidence(author, candidate):
-                continue
-            text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
-            if any(token in text for token in ("logo", "banner", "thumbnail", "group photo", "team photo", "icon", "cover", "background", "hero")):
-                continue
-            filtered.append(candidate)
-
-        if not filtered:
-            return [], image_candidate_rows, [], image_result.failure_reason or "web_search_image_no_strong_candidate"
-
-        clustered = self.cluster_candidates(filtered, fingerprint_top_n=8)
-        filtered_rows = [self._candidate_to_row(candidate) for candidate in clustered]
-        return clustered, image_candidate_rows, filtered_rows, None
-
     def search_author(self, author: AuthorRecord) -> SearchOutcome:
         logger.info("qwen_web_search_profile_start author_id=%s model=%s", author.author_id, self._qwen_tools.model)
         qwen_result = self._qwen_tools.search_author(author)
@@ -512,107 +452,60 @@ class WebSearchClient:
 
         logger.info("qwen_web_search_profile_done author_id=%s trusted_profile_pages=%s", author.author_id, len(trusted_profile_pages))
         raw_candidates: list[SearchCandidate] = []
-        for page in trusted_profile_pages:
-            page_url = str(page.get("url") or "").strip()
+        def _fetch_page_html(page_row: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+            page_url = str(page_row.get("url") or "").strip()
+            if not page_url:
+                return page_row, None
             try:
                 resp = self._http.request("GET", page_url)
             except Exception:
-                continue
-            raw_candidates.extend(self._extract_page_candidates(page, resp.text))
+                return page_row, None
+            return page_row, resp.text
+
+        workers = max(1, min(self._profile_fetch_workers, len(trusted_profile_pages)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_fetch_page_html, page) for page in trusted_profile_pages]
+            for future in as_completed(futures):
+                page, html = future.result()
+                if not html:
+                    continue
+                raw_candidates.extend(self._extract_page_candidates(page, html))
 
         if not raw_candidates:
-            fallback_candidates, fallback_image_rows, fallback_filtered_rows, fallback_failure = self._search_image_fallback(author, trusted_profile_pages)
-            if fallback_candidates:
-                self._last_search_diagnostics = {
-                    "provider_mode": "qwen",
-                    "reason_tags": ["web_search_image_fallback"],
-                    "profile_pages_count": len(qwen_result.profile_pages),
-                    "trusted_profile_pages_count": len(trusted_profile_pages),
-                    "raw_candidates": 0,
-                    "fallback_candidates_count": len(fallback_candidates),
-                }
-                return SearchOutcome(
-                    profile_pages=trusted_profile_pages,
-                    image_candidates=fallback_image_rows,
-                    filtered_candidates=fallback_filtered_rows,
-                    candidates=fallback_candidates,
-                    failure_reason=None,
-                    reason_tags=["web_search_image_fallback"],
-                    raw_content=qwen_result.raw_content,
-                    response_text=qwen_result.response_text,
-                    abandon_reason_log="Primary HTML extraction returned no usable images; accepted web_search_image fallback candidates after local validation.",
-                )
-            failure_reason = fallback_failure or "html_no_image_candidates"
+            failure_reason = "html_no_image_candidates"
             self._last_search_diagnostics = {"provider_mode": "qwen", "reason_tags": [failure_reason], "profile_pages_count": len(qwen_result.profile_pages), "trusted_profile_pages_count": len(trusted_profile_pages), "raw_candidates": 0}
             return SearchOutcome(
                 profile_pages=trusted_profile_pages,
-                image_candidates=fallback_image_rows,
-                filtered_candidates=fallback_filtered_rows,
+                image_candidates=[],
+                filtered_candidates=[],
                 candidates=[],
                 failure_reason=failure_reason,
                 reason_tags=[failure_reason],
                 raw_content=qwen_result.raw_content,
                 response_text=qwen_result.response_text,
-                abandon_reason_log="No usable <img> tags were extracted from trusted profile pages, and web_search_image fallback did not yield strongly linked portrait candidates.",
+                abandon_reason_log="No usable <img> tags were extracted from trusted profile pages.",
             )
 
         image_candidate_rows = [self._candidate_to_row(candidate) for candidate in raw_candidates[:100]]
 
         enriched = self.enrich_candidates_context(raw_candidates, limit=min(len(raw_candidates), 12))
         enriched = self.enrich_candidates_image_metadata(enriched, limit=min(len(enriched), 12))
-
-        filtered = []
-        for candidate in enriched:
-            if (candidate.link_strength or 0.0) < 1.5:
-                continue
-            if self._candidate_name_relevance(author, candidate) < 0.35 and self._candidate_institution_relevance(author, candidate) < 0.35:
-                continue
-            if self._candidate_is_institutional_asset(candidate) and not self._candidate_has_person_evidence(author, candidate):
-                continue
-            text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
-            if any(token in text for token in ("logo", "banner", "thumbnail", "group photo", "team photo", "icon")):
-                continue
-            filtered.append(candidate)
-
-        if not filtered:
-            fallback_candidates, fallback_image_rows, fallback_filtered_rows, fallback_failure = self._search_image_fallback(author, trusted_profile_pages)
-            if fallback_candidates:
-                merged_image_rows = image_candidate_rows + [row for row in fallback_image_rows if row not in image_candidate_rows]
-                self._last_search_diagnostics = {
-                    "provider_mode": "qwen",
-                    "reason_tags": ["web_search_image_fallback"],
-                    "profile_pages_count": len(qwen_result.profile_pages),
-                    "trusted_profile_pages_count": len(trusted_profile_pages),
-                    "raw_candidates": len(raw_candidates),
-                    "filtered_count": 0,
-                    "fallback_candidates_count": len(fallback_candidates),
-                }
-                return SearchOutcome(
-                    profile_pages=trusted_profile_pages,
-                    image_candidates=merged_image_rows,
-                    filtered_candidates=fallback_filtered_rows,
-                    candidates=fallback_candidates,
-                    failure_reason=None,
-                    reason_tags=["web_search_image_fallback"],
-                    raw_content=qwen_result.raw_content,
-                    response_text=qwen_result.response_text,
-                    abandon_reason_log="Primary HTML extraction produced only weak candidates; accepted web_search_image fallback candidates after local validation.",
-                )
-            failure_reason = fallback_failure or "html_no_strong_candidate"
-            self._last_search_diagnostics = {"provider_mode": "qwen", "reason_tags": [failure_reason], "profile_pages_count": len(qwen_result.profile_pages), "trusted_profile_pages_count": len(trusted_profile_pages), "raw_candidates": len(raw_candidates), "filtered_count": 0}
+        clustered = self.cluster_candidates(enriched, fingerprint_top_n=8)
+        if not clustered:
+            failure_reason = "html_no_candidates_after_enrich"
+            self._last_search_diagnostics = {"provider_mode": "qwen", "reason_tags": [failure_reason], "profile_pages_count": len(qwen_result.profile_pages), "trusted_profile_pages_count": len(trusted_profile_pages), "raw_candidates": len(raw_candidates), "kept_count": 0}
             return SearchOutcome(
                 profile_pages=trusted_profile_pages,
-                image_candidates=image_candidate_rows + [row for row in fallback_image_rows if row not in image_candidate_rows],
-                filtered_candidates=fallback_filtered_rows,
+                image_candidates=image_candidate_rows,
+                filtered_candidates=[],
                 candidates=[],
                 failure_reason=failure_reason,
                 reason_tags=[failure_reason],
                 raw_content=qwen_result.raw_content,
                 response_text=qwen_result.response_text,
-                abandon_reason_log="Trusted pages were found, but HTML-extracted images were weak and web_search_image fallback did not yield strongly linked portrait candidates.",
+                abandon_reason_log="HTML images were extracted but none remained after metadata enrichment/deduplication.",
             )
 
-        clustered = self.cluster_candidates(filtered, fingerprint_top_n=8)
         filtered_rows = [self._candidate_to_row(candidate) for candidate in clustered]
         self._last_search_diagnostics = {
             "provider_mode": "qwen",
@@ -635,24 +528,29 @@ class WebSearchClient:
             abandon_reason_log=qwen_result.abandon_reason_log,
         )
 
-    def review_avatar_candidate(
+    def select_avatar_candidate(
         self,
         author: AuthorRecord,
-        candidate: SearchCandidate,
+        candidates: list[SearchCandidate],
         profile_pages: list[dict[str, Any]],
-    ) -> QwenAvatarReviewResult:
-        candidate_payload = {
-            "image_url": candidate.image_url,
-            "source_url": candidate.source_url,
-            "title": candidate.title,
-            "snippet": candidate.snippet,
-            "image_alt": candidate.image_alt,
-            "nearby_text": candidate.nearby_text,
-            "width": candidate.width,
-            "height": candidate.height,
-            "mime": candidate.mime,
-        }
-        return self._qwen_tools.review_avatar_candidate(author, candidate_payload, profile_pages)
+    ) -> QwenAvatarSelectionResult:
+        candidate_payloads: list[dict[str, Any]] = []
+        for candidate in candidates:
+            candidate_payloads.append(
+                {
+                    "image_url": candidate.image_url,
+                    "source_url": candidate.source_url,
+                    "title": candidate.title,
+                    "snippet": candidate.snippet,
+                    "image_alt": candidate.image_alt,
+                    "nearby_text": candidate.nearby_text,
+                    "width": candidate.width,
+                    "height": candidate.height,
+                    "mime": candidate.mime,
+                    "pre_rank_score": candidate.pre_rank_score,
+                }
+            )
+        return self._qwen_tools.select_avatar_candidate(author, candidate_payloads, profile_pages)
 
     def _extract_page_context(self, html: str, image_url: str) -> dict[str, str | None]:
         page_title = None
@@ -771,11 +669,11 @@ class WebSearchClient:
                     candidate.is_valid_image = False
                     candidate.invalid_reason = "image_dimension_unknown"
                 elif min(candidate.width, candidate.height) < min_edge_px:
-                    candidate.is_valid_image = False
-                    candidate.invalid_reason = "invalid_image_too_small"
+                    candidate.is_valid_image = True
+                    candidate.invalid_reason = "warning_image_too_small"
                 elif max(candidate.width / candidate.height, candidate.height / candidate.width) > 4.5:
-                    candidate.is_valid_image = False
-                    candidate.invalid_reason = "invalid_image_extreme_aspect_ratio"
+                    candidate.is_valid_image = True
+                    candidate.invalid_reason = "warning_image_extreme_aspect_ratio"
                 else:
                     candidate.is_valid_image = True
                     candidate.invalid_reason = None
@@ -799,48 +697,13 @@ class WebSearchClient:
         filename = re.sub(r"[^a-z0-9.]+", "", filename)
         return filename
 
-    def _local_candidate_score(self, candidate: SearchCandidate) -> float:
-        score = float(candidate.discovery_score or 0.0)
-        score += min(float(candidate.link_strength or 0.0), 3.0) * 1.2
-        if candidate.linked_profile_domain and candidate.source_domain == candidate.linked_profile_domain:
-            score += 1.5
-        if candidate.is_valid_image is True:
-            score += 1.0
-        if candidate.is_portrait:
-            score += 0.6
-        if candidate.width and candidate.height:
-            score += min((candidate.width * candidate.height) / 600000.0, 2.0)
-            if candidate.width > candidate.height:
-                score -= min((candidate.width / max(candidate.height, 1)) - 1.0, 1.5)
-        text = " ".join([candidate.title or "", candidate.snippet or "", candidate.image_alt or "", candidate.nearby_text or "", candidate.image_url]).lower()
-        if any(token in text for token in ("group", "team", "lab members", "thumbnail", "logo", "icon")):
-            score -= 2.0
-        image_url_lower = (candidate.image_url or "").lower()
-        if any(token in text for token in ("cnrs", "inria", "inrae", "coretrustseal", "seal", "emblem")) and "/public/" in image_url_lower:
-            score -= 3.0
-        if any(token in text for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
-            score -= 2.5
-        if any(token in text for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "loading", "spinner")):
-            score -= 3.0
-        if any(token in text for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
-            score += 1.0
-        source_domain = (candidate.source_domain or "").lower()
-        if source_domain == "researchmap.jp" and image_url_lower.endswith("/avatar.jpg"):
-            score += 4.0
-        if source_domain == "researchmap.jp" and "cover_picture" in image_url_lower:
-            score -= 6.0
-        if candidate.merged_count and candidate.merged_count > 1:
-            score += min((candidate.merged_count - 1) * 0.2, 1.0)
-        candidate.pre_rank_score = score
-        return score
-
-    def _candidate_strength(self, candidate: SearchCandidate) -> float:
-        return self._local_candidate_score(candidate)
-
     def _choose_canonical(self, members: list[SearchCandidate]) -> SearchCandidate:
         if not members:
             raise ValueError("members must not be empty")
-        return max(members, key=self._candidate_strength)
+        valid = [item for item in members if item.is_valid_image is True]
+        if valid:
+            return valid[0]
+        return members[0]
 
     def cluster_candidates(self, candidates: list[SearchCandidate], fingerprint_top_n: int = 8) -> list[SearchCandidate]:
         if not candidates:
@@ -853,7 +716,6 @@ class WebSearchClient:
             stem = self._file_stem_key(candidate.image_url)
             grouped.setdefault(f"{page_host}|{stem or normalized}", []).append(candidate)
         clusters = [CandidateCluster(canonical=self._choose_canonical(members), members=members) for members in grouped.values()]
-        clusters.sort(key=lambda cluster: self._candidate_strength(cluster.canonical), reverse=True)
         merged: list[CandidateCluster] = []
         fp_map: dict[str, CandidateCluster] = {}
         for index, cluster in enumerate(clusters):
@@ -887,7 +749,6 @@ class WebSearchClient:
             canonical.content_deduped = any(item.image_fingerprint for item in cluster.members if item is not canonical)
             canonical.cluster_evidence_summary = f"merged={len(cluster.members)}, sources={len(domains)}, types={','.join(source_types[:3]) or 'unknown'}"
             finalized.append(canonical)
-        finalized.sort(key=self._local_candidate_score, reverse=True)
         return finalized
 
     def download_image(self, url: str) -> tuple[bytes, str]:
@@ -901,3 +762,43 @@ class WebSearchClient:
         content = resp.content
         self._image_cache[cache_key] = CachedImage(content=content, mime=mime)
         return content, mime
+
+    def _multimodal_url_precheck(self, image_url: str) -> tuple[bool, str | None]:
+        if not image_url.startswith("http"):
+            return False, "multimodal_url_not_http"
+        response = None
+        try:
+            response = self._http.request("HEAD", image_url, allow_redirects=True, max_retries=1, timeout=12)
+            content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            content_length_raw = (response.headers.get("Content-Length") or "").strip()
+            if not content_type.startswith("image/"):
+                return False, "multimodal_content_type_not_image"
+            if content_type == "image/svg+xml":
+                return False, "multimodal_svg_not_supported"
+            if not content_length_raw:
+                return False, "multimodal_missing_content_length"
+            try:
+                content_length = int(content_length_raw)
+            except Exception:
+                return False, "multimodal_invalid_content_length"
+            if content_length <= 0:
+                return False, "multimodal_invalid_content_length"
+            if content_length > 20 * 1024 * 1024:
+                return False, "multimodal_content_too_large"
+            return True, None
+        except Exception:
+            return False, "multimodal_head_request_failed"
+        finally:
+            if response is not None:
+                response.close()
+
+    def filter_candidates_for_multimodal(self, candidates: list[SearchCandidate]) -> tuple[list[SearchCandidate], list[dict[str, str]]]:
+        accepted: list[SearchCandidate] = []
+        dropped: list[dict[str, str]] = []
+        for candidate in candidates:
+            ok, reason = self._multimodal_url_precheck(candidate.image_url)
+            if ok:
+                accepted.append(candidate)
+            else:
+                dropped.append({"image_url": candidate.image_url, "reason": str(reason or "unknown")})
+        return accepted, dropped

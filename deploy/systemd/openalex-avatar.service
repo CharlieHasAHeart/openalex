@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenAlex Avatar Pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/charlie/workspace/openalex
+ExecStart=/home/charlie/workspace/openalex/scripts/run_avatar_systemd.sh
+StandardOutput=append:/home/charlie/workspace/openalex/logs/openalex-avatar.log
+StandardError=append:/home/charlie/workspace/openalex/logs/openalex-avatar.log
+Restart=always
+RestartSec=8
+TimeoutStopSec=120
+KillSignal=SIGINT
+Environment=PYTHONUNBUFFERED=1
+Environment=RUNS_DIR=runs
+Environment=WORKERS=1
+Environment=PROGRESS_EVERY=10
+Environment=LOG_LEVEL=INFO
+Environment=AUTHOR_LIMIT=0
+Environment=AUTHOR_OFFSET=0
+
+[Install]
+WantedBy=default.target

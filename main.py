@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=1, help="Worker threads for concurrent processing. 1 means serial.")
     parser.add_argument("--progress-every", type=int, default=50, help="Emit progress log every N authors. 0 disables progress logs.")
     parser.add_argument("--runs-dir", default="runs", help="Directory for local run artifacts.")
+    parser.add_argument("--resume-run-id", default="", help="Resume from an existing run_id under runs-dir.")
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -143,6 +144,7 @@ def _maybe_log_progress(
     start_monotonic: float,
     last_status: str,
     progress_every: int,
+    stats: Counter[str] | None = None,
 ) -> None:
     if done <= 0 or progress_every <= 0:
         return
@@ -150,14 +152,27 @@ def _maybe_log_progress(
         return
     elapsed = max(time.monotonic() - start_monotonic, 1e-9)
     rate = done / elapsed
+    ok_count = int((stats or {}).get("ok", 0))
+    failed_count = done - ok_count
     if total is None:
-        logger.info("progress done=%s total=unknown rate=%.2f/s last_status=%s", done, rate, last_status)
+        logger.info(
+            "progress done=%s total=unknown remaining=unknown ok=%s failed=%s rate=%.2f/s last_status=%s",
+            done,
+            ok_count,
+            failed_count,
+            rate,
+            last_status,
+        )
         return
+    remaining = max(0, total - done)
     logger.info(
-        "progress done=%s total=%s pct=%.1f rate=%.2f/s last_status=%s",
+        "progress done=%s total=%s remaining=%s pct=%.1f ok=%s failed=%s rate=%.2f/s last_status=%s",
         done,
         total,
+        remaining,
         done / total * 100.0,
+        ok_count,
+        failed_count,
         rate,
         last_status,
     )
@@ -189,19 +204,31 @@ def _run_parallel(config, limiter, run_store, authors, workers: int, progress_ev
             for stat_key in executor.map(_task, authors):
                 stats[stat_key] += 1
                 done += 1
-                _maybe_log_progress(logger, done, total, start_monotonic, stat_key, progress_every)
+                _maybe_log_progress(logger, done, total, start_monotonic, stat_key, progress_every, stats=stats)
+                run_store.update_progress(
+                    elapsed_seconds=time.monotonic() - start_monotonic,
+                    last_status=stat_key,
+                    progress_done=done,
+                    progress_total=total or 0,
+                )
     finally:
         for repository in repositories:
             repository.close()
     return stats
 
 
-def _run_serial(runner, authors, progress_every: int, logger, total, start_monotonic):
+def _run_serial(runner, run_store, authors, progress_every: int, logger, total, start_monotonic):
     stats: Counter[str] = Counter()
     for done, author in enumerate(authors, start=1):
         stat_key = runner.run_for_author_seed(author)
         stats[stat_key] += 1
-        _maybe_log_progress(logger, done, total, start_monotonic, stat_key, progress_every)
+        _maybe_log_progress(logger, done, total, start_monotonic, stat_key, progress_every, stats=stats)
+        run_store.update_progress(
+            elapsed_seconds=time.monotonic() - start_monotonic,
+            last_status=stat_key,
+            progress_done=done,
+            progress_total=total or 0,
+        )
     return stats
 
 
@@ -247,9 +274,10 @@ def main() -> int:
             authors = repository.list_author_records_from_authors_analysis(limit=limit, offset=max(args.author_offset, 0))
 
     total = len(authors)
+    source_total = len(authors)
     logger.info(
         "pipeline_run_loaded_authors total=%s explicit=%s workers=%s runs_dir=%s",
-        total,
+        source_total,
         has_explicit_authors,
         max(1, args.workers),
         args.runs_dir,
@@ -257,6 +285,7 @@ def main() -> int:
 
     run_store = LocalRunStore(
         base_dir=args.runs_dir,
+        resume_run_id=args.resume_run_id.strip() or None,
         config_snapshot={
             "qwen_model": config.qwen_model,
             "qwen_enable_web_search": config.qwen_enable_web_search,
@@ -264,12 +293,37 @@ def main() -> int:
             "qwen_max_candidates": config.qwen_max_candidates,
         },
     )
+    resume_processed = run_store.processed_author_ids()
+    if resume_processed:
+        authors = [author for author in authors if author.author_id not in resume_processed]
+    total = len(authors)
+    if args.resume_run_id.strip():
+        logger.info(
+            "pipeline_run_resume_loaded run_id=%s source_total=%s already_processed=%s remaining=%s",
+            run_store.run_id,
+            source_total,
+            len(resume_processed),
+            total,
+        )
+    run_store.set_run_scope(
+        source_total_authors=source_total,
+        scheduled_authors=total,
+        input_summary={
+            "explicit_author_ids": len(explicit_author_ids),
+            "author_offset": max(args.author_offset, 0),
+            "author_limit": args.author_limit,
+            "resume_run_id": args.resume_run_id.strip() or None,
+            "already_processed": len(resume_processed),
+        },
+        planned_authors=authors,
+    )
 
     if max(1, args.workers) == 1:
         runner, runner_repository = _create_runner(config, limiter, run_store)
         try:
             stats = _run_serial(
                 runner=runner,
+                run_store=run_store,
                 authors=authors,
                 progress_every=max(args.progress_every, 0),
                 logger=logger,
@@ -294,12 +348,15 @@ def main() -> int:
     elapsed_seconds = time.monotonic() - start_monotonic
     run_store.finalize(
         stats=dict(stats),
-        total_authors=total,
+        total_authors=source_total,
         elapsed_seconds=elapsed_seconds,
         input_summary={
             "explicit_author_ids": len(explicit_author_ids),
             "author_offset": max(args.author_offset, 0),
             "author_limit": args.author_limit,
+            "resume_run_id": args.resume_run_id.strip() or None,
+            "already_processed": len(resume_processed),
+            "remaining_after_filter": total,
         },
     )
     logger.info(

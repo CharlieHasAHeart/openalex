@@ -2,16 +2,15 @@
 
 这个项目现在只保留一条极简头像获取主流程：
 
-`load author -> qwen web_search 找相关网页 -> 本地解析网页 HTML 抽图 -> 主链路失败时 qwen web_search_image fallback -> 本地筛选/校验/聚类/重排 -> 选图 -> LLM 头像复核 -> upload oss -> upsert public.authors_avatars -> write local run record`
+`load author -> qwen web_search 找相关网页 -> 本地解析网页 HTML 抽图 -> 本地筛选/校验/聚类/重排 -> 候选列表交给 LLM 选图 -> upload oss -> upsert public.authors_avatars -> write local run record`
 
 ## 当前架构
 
 - 搜索与候选发现只使用 `qwen3.5-plus Responses API`
 - Qwen 只使用 `web_search` 返回相关网页证据
 - `image_candidates` / `filtered_candidates` 由本地代码生成，不再依赖 Qwen 生成图片候选
-- 当主链路 `web_search -> HTML 抽图` 失败时，会触发 `web_search_image` 作为高门槛 fallback
-- `web_search_image` 结果不会直接采用，仍然要经过本地校验、去重和重排
-- 最终候选在上传前会送回 LLM 复核，若判定不是头像则保守失败
+- 最终候选由 LLM 在候选列表中直接选择，并返回简洁选择理由
+- 本地不再进行候选打分排序，避免中间启发式分数干预最终选图
 - 保留 Qwen 输出 schema 校验，固定输出字段：
   - `profile_pages`
   - `image_candidates`
@@ -39,17 +38,11 @@ flowchart TD
     C -- Yes --> D[Fetch HTML and extract img candidates]
     D --> E{HTML candidates strong enough?}
     E -- Yes --> G[Local enrich + metadata check + dedupe + rerank]
-    E -- No --> F[Qwen web_search_image fallback]
-    F --> F2{Fallback candidates pass local strict checks?}
-    F2 -- No --> Z2[Fail: no_strong_candidate]
-    F2 -- Yes --> G
-    G --> H[Select best candidate]
+    E -- No --> Z2[Fail: no_strong_candidate]
+    G --> H[LLM select best candidate]
     H --> I{Local image valid?}
     I -- No --> Z3[Fail: invalid_image]
-    I -- Yes --> J[LLM avatar review]
-    J --> K{LLM says avatar?}
-    K -- No --> Z4[Fail: llm_avatar_review_rejected]
-    K -- Yes --> L[Upload OSS]
+    I -- Yes --> L[Upload OSS]
     L --> M[Upsert public.authors_avatars]
     M --> N[Write runs summary/author/failures]
 ```
@@ -88,10 +81,10 @@ OSS：
 
 Qwen：
 
-- `QWEN_API_KEY`，兼容旧变量 `LLM_API_KEY`
-- `QWEN_BASE_URL`，默认 `https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1`
+- `LLM_API_KEY`（或 `QWEN_API_KEY`）
+- `LLM_BASE_URL`（或 `QWEN_BASE_URL`）
+- `LLM_MODEL`（或 `QWEN_MODEL`）
 - `QWEN_RESPONSE_PATH`，默认 `/responses`
-- `QWEN_MODEL`，默认 `qwen3.5-plus`
 - `QWEN_ENABLE_WEB_SEARCH`，默认 `true`
 - `QWEN_MAX_CANDIDATES`，默认 `8`
 - `QWEN_MIN_CONFIDENCE`，默认 `0.55`
@@ -123,6 +116,12 @@ python3 main.py --author-ids-file author_ids.json --workers 4
 
 ```bash
 python3 main.py --author-limit 1000 --author-offset 0 --workers 4
+```
+
+断点续跑（resume）：
+
+```bash
+python3 main.py --author-limit 1000 --author-offset 0 --workers 4 --resume-run-id <run_id>
 ```
 
 ## 冒烟测试
@@ -163,7 +162,7 @@ python3 main.py --author-ids-file author_ids.json --workers 1 --progress-every 1
 - `enrich_context_done`
 - `enrich_image_metadata_done`
 - `dedupe_cluster_done`
-- `select_best_candidate_done`
+- `llm_select_candidate_done`
 - `upload_oss_done`
 - `upsert_authors_avatars_done`
 
@@ -205,11 +204,33 @@ python3 main.py --author-ids-file author_ids.json --workers 1 --progress-every 1
 ```text
 runs/<date>/<run_id>/
   summary.json
+  planned_authors.jsonl
   author_runs.jsonl
+  successes.jsonl
   failures.jsonl
 ```
 
 失败样本会额外保留 `raw_content` / `response_text`，便于排查 Qwen 返回格式问题。
+
+其中：
+
+- `planned_authors.jsonl`：本次计划处理作者清单（用于审计“应处理集合”）
+- `successes.jsonl`：拉取成功并完成入库的作者记录
+- `failures.jsonl`：未拉取成功作者记录（可直接用于二次拉取）
+- `author_runs.jsonl`：全量作者结果（成功+失败）
+
+`summary.json` 会在运行中持续刷新，可实时查看：
+
+- `source_total_authors`
+- `scheduled_authors`
+- `recorded_authors`
+- `remaining_authors`
+- `success_count`
+- `failure_count`
+- `stats`
+- `run_status`（`running` / `finished`）
+
+这套结构适合 systemd 长时间运行时做实时监控与中断恢复。
 
 单个作者记录至少包含：
 

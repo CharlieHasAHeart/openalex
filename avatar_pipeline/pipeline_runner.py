@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections import Counter
-from urllib.parse import urlparse
 
 from avatar_pipeline.avatar_gate import validate_image_candidate
 from avatar_pipeline.config import PipelineConfig
@@ -128,53 +126,85 @@ class PipelineRunner:
         self._log_step(author, "enrich_image_metadata_done", candidates=len(candidates))
         candidates = self._web_search.cluster_candidates(candidates, fingerprint_top_n=8)
         self._log_step(author, "dedupe_cluster_done", candidates=len(candidates))
-        ranked = self._rank_candidates(author, candidates)
-        ranked_candidates = [self._ranked_candidate_summary(candidate) for candidate in ranked[:3]]
+        candidate_pool = list(candidates)
+        ranked_candidates = [self._ranked_candidate_summary(candidate) for candidate in candidate_pool[:5]]
         logger.info(
-            "pipeline_ranked_candidates run_id=%s author_id=%s ranked_candidates=%s",
+            "pipeline_candidates_for_llm run_id=%s author_id=%s candidates=%s",
             self._run_store.run_id,
             author.author_id,
             ranked_candidates,
         )
-        if self._should_fail_small_avatar_fallback(ranked):
-            failure_reason = "small_avatar_only_background_fallback"
-            self._log_step(author, "select_best_candidate_rejected", failure_reason=failure_reason)
-            return PipelineResult(
-                author_id=author.author_id,
-                status="no_image",
-                error_message=failure_reason,
-                failure_reason=failure_reason,
-                ranked_candidates=ranked_candidates,
-                profile_pages=outcome.profile_pages,
-                image_candidates=outcome.image_candidates,
-                filtered_candidates=outcome.filtered_candidates,
-                raw_content=outcome.raw_content,
-                response_text=outcome.response_text,
-                abandon_reason_log=outcome.abandon_reason_log,
-            )
-        self._log_step(author, "select_best_candidate_start", ranked=len(ranked))
-        selected = self._select_candidate(ranked)
-        if selected is None:
-            failure_reason = outcome.failure_reason or "no_ranked_candidates"
-            self._log_step(author, "select_best_candidate_empty", failure_reason=failure_reason)
-            return PipelineResult(
-                author_id=author.author_id,
-                status="no_image",
-                error_message=failure_reason,
-                failure_reason=failure_reason,
-                ranked_candidates=ranked_candidates,
-                profile_pages=outcome.profile_pages,
-                image_candidates=outcome.image_candidates,
-                filtered_candidates=outcome.filtered_candidates,
-                raw_content=outcome.raw_content,
-                response_text=outcome.response_text,
-                abandon_reason_log=outcome.abandon_reason_log,
-            )
-
-        selected_dict = self._candidate_to_dict(selected)
+        shortlist = candidate_pool[:8]
+        compatible_shortlist, dropped_for_multimodal = self._web_search.filter_candidates_for_multimodal(shortlist)
         self._log_step(
             author,
-            "select_best_candidate_done",
+            "llm_input_url_precheck_done",
+            shortlist=len(shortlist),
+            compatible=len(compatible_shortlist),
+            dropped=len(dropped_for_multimodal),
+        )
+        if not compatible_shortlist:
+            failure_reason = "llm_input_no_multimodal_compatible_candidates"
+            self._log_step(author, "llm_select_candidate_skipped", failure_reason=failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=failure_reason,
+                failure_reason=failure_reason,
+                ranked_candidates=ranked_candidates,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=outcome.raw_content,
+                response_text=outcome.response_text,
+                abandon_reason_log=f"multimodal_url_precheck_dropped={dropped_for_multimodal[:8]}",
+            )
+        self._log_step(author, "llm_select_candidate_start", candidates=len(candidate_pool), shortlist=len(compatible_shortlist))
+        selection = self._web_search.select_avatar_candidate(author, compatible_shortlist, outcome.profile_pages)
+        if selection.failure_reason:
+            self._log_step(author, "llm_select_candidate_failed", failure_reason=selection.failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=selection.reason or selection.failure_reason,
+                failure_reason=selection.failure_reason,
+                ranked_candidates=ranked_candidates,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=selection.raw_content or outcome.raw_content,
+                response_text=selection.response_text or outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
+        if selection.selected_index < 0 or selection.selected_index >= len(compatible_shortlist):
+            failure_reason = "llm_avatar_select_no_candidate"
+            self._log_step(author, "llm_select_candidate_empty", failure_reason=failure_reason)
+            return PipelineResult(
+                author_id=author.author_id,
+                status="no_image",
+                error_message=selection.reason or failure_reason,
+                failure_reason=failure_reason,
+                ranked_candidates=ranked_candidates,
+                profile_pages=outcome.profile_pages,
+                image_candidates=outcome.image_candidates,
+                filtered_candidates=outcome.filtered_candidates,
+                raw_content=selection.raw_content or outcome.raw_content,
+                response_text=selection.response_text or outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
+            )
+        selected = compatible_shortlist[selection.selected_index]
+
+        selected_dict = self._candidate_to_dict(selected)
+        selected_dict["llm_selection"] = {
+            "selected_index": selection.selected_index,
+            "confidence": selection.confidence,
+            "reason": selection.reason,
+            "failure_reason": selection.failure_reason,
+            "shortlist_count": len(compatible_shortlist),
+        }
+        self._log_step(
+            author,
+            "llm_select_candidate_done",
             source_url=selected.source_url,
             image_url=selected.image_url,
             is_valid_image=selected.is_valid_image,
@@ -229,57 +259,6 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
-                abandon_reason_log=outcome.abandon_reason_log,
-            )
-
-        self._log_step(author, "llm_avatar_review_start", image_url=selected.image_url)
-        review = self._web_search.review_avatar_candidate(author, selected, outcome.profile_pages)
-        selected_dict["llm_avatar_review"] = {
-            "is_avatar": review.is_avatar,
-            "confidence": review.confidence,
-            "reason": review.reason,
-            "risk_flags": review.risk_flags,
-            "failure_reason": review.failure_reason,
-        }
-        if review.failure_reason:
-            self._log_step(author, "llm_avatar_review_failed", failure_reason=review.failure_reason)
-            return PipelineResult(
-                author_id=author.author_id,
-                status="no_image",
-                error_message=review.failure_reason,
-                failure_reason=review.failure_reason,
-                commons_file=selected.source_url,
-                ranked_candidates=ranked_candidates,
-                selected_candidate=selected_dict,
-                profile_pages=outcome.profile_pages,
-                image_candidates=outcome.image_candidates,
-                filtered_candidates=outcome.filtered_candidates,
-                raw_content=review.raw_content or outcome.raw_content,
-                response_text=review.response_text or outcome.response_text,
-                abandon_reason_log=outcome.abandon_reason_log,
-            )
-        self._log_step(
-            author,
-            "llm_avatar_review_done",
-            is_avatar=review.is_avatar,
-            confidence=f"{review.confidence:.3f}",
-        )
-        if not review.is_avatar:
-            failure_reason = "llm_avatar_review_rejected"
-            self._log_step(author, "llm_avatar_review_rejected", failure_reason=failure_reason)
-            return PipelineResult(
-                author_id=author.author_id,
-                status="no_image",
-                error_message=review.reason or failure_reason,
-                failure_reason=failure_reason,
-                commons_file=selected.source_url,
-                ranked_candidates=ranked_candidates,
-                selected_candidate=selected_dict,
-                profile_pages=outcome.profile_pages,
-                image_candidates=outcome.image_candidates,
-                filtered_candidates=outcome.filtered_candidates,
-                raw_content=review.raw_content or outcome.raw_content,
-                response_text=review.response_text or outcome.response_text,
                 abandon_reason_log=outcome.abandon_reason_log,
             )
 
@@ -373,120 +352,3 @@ class PipelineRunner:
             "height": candidate.height,
             "mime": candidate.mime,
         }
-
-    def _select_candidate(self, ranked: list[SearchCandidate]) -> SearchCandidate | None:
-        valid = [candidate for candidate in ranked if candidate.is_valid_image is True]
-        if valid:
-            return valid[0]
-        return ranked[0] if ranked else None
-
-    def _should_fail_small_avatar_fallback(self, ranked: list[SearchCandidate]) -> bool:
-        if not ranked:
-            return False
-        top = ranked[0]
-        if top.is_valid_image is not False or top.invalid_reason != "invalid_image_too_small":
-            return False
-        top_url = (top.image_url or "").lower()
-        top_text = " ".join([top.image_url or "", top.image_alt or "", top.nearby_text or ""]).lower()
-        if not any(token in (top_url + " " + top_text) for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
-            return False
-        valid_candidates = [candidate for candidate in ranked[1:] if candidate.is_valid_image is True]
-        if not valid_candidates:
-            return False
-        for candidate in valid_candidates:
-            text = " ".join([candidate.image_url or "", candidate.image_alt or "", candidate.nearby_text or ""]).lower()
-            if not any(token in text for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "banner")):
-                return False
-        return True
-
-    def _score_candidate(self, author: AuthorRecord, candidate: SearchCandidate) -> float:
-        name = (author.display_name or "").strip().lower()
-        institution = (author.institution_name or "").strip().lower()
-        domain = (candidate.source_domain or urlparse(candidate.source_url).hostname or "").lower()
-        text_blob = " ".join(
-            [
-                candidate.title or "",
-                candidate.snippet or "",
-                candidate.page_title or "",
-                candidate.page_h1 or "",
-                candidate.page_meta_description or "",
-                candidate.image_alt or "",
-                candidate.nearby_text or "",
-            ]
-        ).lower()
-
-        score = float(candidate.discovery_score or 0.0)
-        if name and name in text_blob:
-            score += 2.5
-        elif name:
-            name_tokens = [token for token in re.split(r"\s+", name) if token]
-            if len(name_tokens) >= 2 and all(token in text_blob for token in name_tokens[:2]):
-                score += 1.2
-            elif any(token in text_blob for token in name_tokens):
-                score += 0.6
-
-        if institution and institution in text_blob:
-            score += 1.2
-        elif institution:
-            institution_tokens = [token for token in re.split(r"\s+", institution) if len(token) > 3]
-            if any(token in text_blob for token in institution_tokens):
-                score += 0.4
-
-        if domain.endswith(".edu") or ".edu." in domain:
-            score += 1.0
-        if "orcid.org" in domain:
-            score += 0.8
-        if any(token in domain for token in ("university", "institute", "research", "lab")):
-            score += 0.5
-
-        if candidate.is_valid_image is True:
-            score += 1.0
-        elif candidate.is_valid_image is False:
-            score -= 2.0
-
-        if candidate.width and candidate.height:
-            min_edge = min(candidate.width, candidate.height)
-            if min_edge >= self._config.min_image_edge_px:
-                score += 0.6
-            aspect_ratio = max(candidate.width / candidate.height, candidate.height / candidate.width)
-            if aspect_ratio > 4.5:
-                score -= 1.5
-            if candidate.width > candidate.height:
-                score -= min((candidate.width / max(candidate.height, 1)) - 1.0, 1.5)
-
-        if candidate.merged_count and candidate.merged_count > 1:
-            score += min((candidate.merged_count - 1) * 0.25, 1.0)
-
-        image_blob = " ".join(
-            [
-                candidate.image_url or "",
-                candidate.image_alt or "",
-                candidate.nearby_text or "",
-                candidate.title or "",
-                candidate.snippet or "",
-                candidate.page_title or "",
-                candidate.page_h1 or "",
-                candidate.page_meta_description or "",
-            ]
-        ).lower()
-        if any(token in image_blob for token in ("syuugou", "group photo", "team photo", "basic_photo_2")):
-            score -= 2.5
-        if any(token in image_blob for token in ("cover", "cover_picture", "background", "bg-", "hero", "header", "jumbotron", "masthead", "loading", "spinner")):
-            score -= 3.0
-        if any(token in image_blob for token in ("cnrs", "inria", "inrae", "coretrustseal", "seal", "emblem", "logo")) and "/public/" in (candidate.image_url or "").lower():
-            score -= 4.0
-        if any(token in image_blob for token in ("avatar", "portrait", "headshot", "profile photo", "profile_image", "basic_photo_1")):
-            score += 1.0
-        image_url_lower = (candidate.image_url or "").lower()
-        if domain == "researchmap.jp" and image_url_lower.endswith("/avatar.jpg"):
-            score += 4.0
-        if domain == "researchmap.jp" and "cover_picture" in image_url_lower:
-            score -= 6.0
-
-        candidate.pre_rank_score = score
-        return score
-
-    def _rank_candidates(self, author: AuthorRecord, candidates: list[SearchCandidate]) -> list[SearchCandidate]:
-        ranked = list(candidates)
-        ranked.sort(key=lambda candidate: self._score_candidate(author, candidate), reverse=True)
-        return ranked

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+
 def load_dotenv(path: str = ".env", override: bool = False) -> None:
     if not os.path.exists(path):
         return
@@ -30,6 +31,16 @@ def _bool_env(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _get_env_any(names: tuple[str, ...], *, required: bool = False, default: str | None = None) -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value != "":
+            return value
+    if required:
+        raise ValueError(f"Missing required env: one of {', '.join(names)}")
+    return default or ""
 
 
 def _normalize_oss_endpoint(endpoint: str, bucket: str) -> str:
@@ -107,10 +118,10 @@ class PipelineConfig:
             retry_max_seconds=float(_get_env("RETRY_MAX_SECONDS", "60")),
             retry_jitter_ratio=float(_get_env("RETRY_JITTER_RATIO", "0.25")),
             retry_429_min_delay_seconds=float(_get_env("RETRY_429_MIN_DELAY_SECONDS", "8")),
-            qwen_api_key=os.getenv("QWEN_API_KEY") or os.getenv("LLM_API_KEY"),
-            qwen_base_url=_get_env("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"),
+            qwen_api_key=_get_env_any(("LLM_API_KEY", "QWEN_API_KEY"), required=True),
+            qwen_base_url=_get_env_any(("LLM_BASE_URL", "QWEN_BASE_URL"), required=True),
             qwen_response_path=_get_env("QWEN_RESPONSE_PATH", "/responses"),
-            qwen_model=_get_env("QWEN_MODEL", "qwen3.5-plus"),
+            qwen_model=_get_env_any(("LLM_MODEL", "QWEN_MODEL"), required=True),
             qwen_enable_web_search=_bool_env("QWEN_ENABLE_WEB_SEARCH", True),
             qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "8")),
             qwen_min_confidence=float(_get_env("QWEN_MIN_CONFIDENCE", "0.55")),

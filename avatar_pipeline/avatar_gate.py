@@ -15,10 +15,6 @@ def validate_image_candidate(
         return False, "empty_image_bytes"
     if candidate.width <= 0 or candidate.height <= 0:
         return False, "image_dimension_unknown"
-    if min(candidate.width, candidate.height) < min_edge_px:
-        return False, "invalid_image_too_small"
-    if max(candidate.width / candidate.height, candidate.height / candidate.width) > 4.5:
-        return False, "invalid_image_extreme_aspect_ratio"
     return True, None
 
 
