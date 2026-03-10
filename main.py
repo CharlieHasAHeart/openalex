@@ -107,7 +107,6 @@ def _create_runner(config, limiter, run_store):
         qwen_model=config.qwen_model,
         qwen_timeout_seconds=config.qwen_timeout_seconds,
         qwen_enable_web_search=config.qwen_enable_web_search,
-        qwen_enable_t2i_search=config.qwen_enable_t2i_search,
         qwen_min_confidence=config.qwen_min_confidence,
     )
     oss_uploader = OssUploader(
@@ -261,7 +260,6 @@ def main() -> int:
         config_snapshot={
             "qwen_model": config.qwen_model,
             "qwen_enable_web_search": config.qwen_enable_web_search,
-            "qwen_enable_t2i_search": config.qwen_enable_t2i_search,
             "qwen_min_confidence": config.qwen_min_confidence,
             "qwen_max_candidates": config.qwen_max_candidates,
         },

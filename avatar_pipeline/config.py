@@ -74,7 +74,6 @@ class PipelineConfig:
     qwen_response_path: str
     qwen_model: str
     qwen_enable_web_search: bool
-    qwen_enable_t2i_search: bool
     qwen_max_candidates: int
     qwen_min_confidence: float
     qwen_timeout_seconds: int
@@ -113,7 +112,6 @@ class PipelineConfig:
             qwen_response_path=_get_env("QWEN_RESPONSE_PATH", "/responses"),
             qwen_model=_get_env("QWEN_MODEL", "qwen3.5-plus"),
             qwen_enable_web_search=_bool_env("QWEN_ENABLE_WEB_SEARCH", True),
-            qwen_enable_t2i_search=_bool_env("QWEN_ENABLE_T2I_SEARCH", True),
             qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "8")),
             qwen_min_confidence=float(_get_env("QWEN_MIN_CONFIDENCE", "0.55")),
             qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "30")),
