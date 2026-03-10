@@ -49,3 +49,4 @@ class PipelineResult:
     filtered_candidates: list[dict[str, Any]] = field(default_factory=list)
     raw_content: str | None = None
     response_text: str | None = None
+    abandon_reason_log: str | None = None

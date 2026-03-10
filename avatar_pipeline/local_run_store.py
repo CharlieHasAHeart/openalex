@@ -41,6 +41,7 @@ class LocalRunStore:
             "selected_candidate": result.selected_candidate,
             "final_status": result.status,
             "failure_reason": result.failure_reason or result.error_message,
+            "abandon_reason_log": result.abandon_reason_log,
             "oss_url": result.oss_url,
             "content_sha256": result.content_sha256,
             "raw_content": result.raw_content,

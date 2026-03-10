@@ -99,6 +99,7 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
             )
 
         self._log_step(author, "normalize_candidates", candidates=len(outcome.candidates))
@@ -129,6 +130,7 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
             )
 
         selected_dict = self._candidate_to_dict(selected)
@@ -154,6 +156,7 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
             )
 
         self._log_step(author, "prepare_upload_start", image_url=selected.image_url)
@@ -186,6 +189,7 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
             )
 
         sha256 = sha256_hex(image_bytes)
@@ -204,6 +208,7 @@ class PipelineRunner:
                 filtered_candidates=outcome.filtered_candidates,
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
+                abandon_reason_log=outcome.abandon_reason_log,
             )
 
         self._log_step(author, "upload_oss_start", content_sha256=sha256)
@@ -223,6 +228,7 @@ class PipelineRunner:
             filtered_candidates=outcome.filtered_candidates,
             raw_content=outcome.raw_content,
             response_text=outcome.response_text,
+            abandon_reason_log=outcome.abandon_reason_log,
         )
         self._log_step(author, "upsert_authors_avatars_start")
         self._repo.upsert_result(result)

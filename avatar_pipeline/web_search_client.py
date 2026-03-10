@@ -66,6 +66,7 @@ class SearchOutcome:
     reason_tags: list[str] | None = None
     raw_content: str | None = None
     response_text: str | None = None
+    abandon_reason_log: str | None = None
 
 
 @dataclass(slots=True)
@@ -286,6 +287,7 @@ class WebSearchClient:
                 reason_tags=[failure_reason],
                 raw_content=stage1.raw_content,
                 response_text=stage1.response_text,
+                abandon_reason_log=stage1.abandon_reason_log,
             )
 
         logger.info("qwen_two_stage_profile_done author_id=%s trusted_profile_pages=%s", author.author_id, len(trusted_profile_pages))
@@ -326,6 +328,7 @@ class WebSearchClient:
             reason_tags=[failure_reason] if failure_reason else [],
             raw_content=stage2.raw_content or stage1.raw_content,
             response_text=stage2.response_text or stage1.response_text,
+            abandon_reason_log=stage2.abandon_reason_log or stage1.abandon_reason_log,
         )
 
     def _filter_candidates_by_profile_evidence(self, candidates: list[SearchCandidate]) -> list[SearchCandidate]:

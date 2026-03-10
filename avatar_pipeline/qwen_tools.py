@@ -24,6 +24,7 @@ class QwenSearchResult:
     raw_content: str | None = None
     response_text: str | None = None
     response_format_mode: str | None = None
+    abandon_reason_log: str | None = None
     invalid_profile_page_count: int = 0
     invalid_image_candidate_count: int = 0
     invalid_filtered_candidate_count: int = 0
@@ -96,9 +97,9 @@ class QwenToolsClient:
             "Return exactly one JSON object and nothing else.\n"
             "Every candidate must be strongly linked to one provided profile page or to the same domain as a provided profile page.\n"
             "Prefer portraits/headshots on official institutional pages. Reject logos, thumbnails, group photos, banners, posters, social avatars, weak-source images.\n"
-            "If no image can be strongly linked back to the profile evidence, return empty arrays and set failure_reason.\n"
+            "If no image can be strongly linked back to the profile evidence, return empty arrays, set failure_reason, and explain the abandonment in abandon_reason_log.\n"
             f"Keep at most {max_candidates} filtered candidates.\n"
-            'Schema: {"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],"image_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"filtered_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"failure_reason":""}\n'
+            'Schema: {"profile_pages":[{"url":"","title":"","snippet":"","source_type":"","confidence":0.0,"reason":""}],"image_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"filtered_candidates":[{"image_url":"","source_url":"","title":"","snippet":"","source_type":"","image_alt":"","nearby_text":"","confidence":0.0,"reason":""}],"failure_reason":"","abandon_reason_log":""}\n'
             "Use arrays, not null. Additional keys are forbidden.\n"
             f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}\n"
             f"profile_pages={json.dumps(profile_pages, ensure_ascii=False)}"
@@ -249,7 +250,8 @@ class QwenToolsClient:
                 invalid_filtered += 1
 
         failure_reason = str(obj.get("failure_reason") or "").strip() or None
-        allowed_keys = {"profile_pages", "image_candidates", "filtered_candidates", "failure_reason"}
+        abandon_reason_log = str(obj.get("abandon_reason_log") or "").strip() or None
+        allowed_keys = {"profile_pages", "image_candidates", "filtered_candidates", "failure_reason", "abandon_reason_log"}
         extra_keys = sorted(set(obj.keys()) - allowed_keys)
         if extra_keys:
             schema_issue_count += len(extra_keys)
@@ -261,6 +263,7 @@ class QwenToolsClient:
             image_candidates=image_candidates,
             filtered_candidates=filtered_candidates,
             failure_reason=failure_reason,
+            abandon_reason_log=abandon_reason_log,
             invalid_profile_page_count=invalid_profile,
             invalid_image_candidate_count=invalid_image,
             invalid_filtered_candidate_count=invalid_filtered,
@@ -322,6 +325,7 @@ class QwenToolsClient:
                 raw_content=str(exc)[:4000],
                 response_text=str(exc)[:4000],
                 response_format_mode=response_format_mode,
+                abandon_reason_log=str(exc)[:4000],
             )
         except Exception as exc:
             logger.warning("%s_request_failed author_id=%s error_message=%s", stage_name, author.author_id, str(exc))
