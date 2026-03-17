@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import threading
 import time
 import warnings
@@ -18,7 +17,6 @@ from avatar_pipeline.models import AuthorRecord
 logger = logging.getLogger(__name__)
 _QWEN_CALL_LOCK = threading.Lock()
 _QWEN_LAST_CALL_TS = 0.0
-_URL_PATTERN = re.compile(r"https?://[^\s\]\[\)\(\"'<>]+", re.IGNORECASE)
 
 warnings.filterwarnings(
     "ignore",
@@ -129,12 +127,12 @@ class QwenToolsClient:
 
     def _build_prompt(self, author: AuthorRecord) -> str:
         return (
-            "Use web_search to find relevant author pages for this exact researcher.\\n"
-            "You must anchor identity by ORCID first, then verify with display_name and institution.\\n"
-            "Prioritize result pages from researchgate.net and academia.edu, then orcid.org and official academic pages.\\n"
-            "Return page URLs only (do not return direct image URLs); image extraction is done by code.\\n"
-            "Return one compact JSON object only. Keep reason <= 12 words.\\n"
-            'Schema: {"profile_pages":[{"site":"","profile_url":"","reason":"","confidence":0.0}],"image_candidates":[],"filtered_candidates":[],"failure_reason":""}\\n'
+            "Use the web_search_image tool to find profile portrait photos for this exact researcher.\\n"
+            "Anchor identity with display_name + orcid + institution_name before accepting any image.\\n"
+            "Prioritize official university/department/lab/personal homepage sources.\\n"
+            "Prefer a single-person headshot or upper-body portrait.\\n"
+            "Avoid logos, banners, icons, illustrations, group photos, and same-name mismatches.\\n"
+            "Use web_search_image and return your normal tool-assisted answer format.\\n"
             f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}"
         )
 
@@ -161,36 +159,6 @@ class QwenToolsClient:
                 return "\n".join(chunks)
         return None
 
-    def _extract_json_object(self, content: str) -> dict[str, Any] | None:
-        stripped = (content or "").strip()
-        if not stripped:
-            return None
-        try:
-            obj = json.loads(stripped)
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            pass
-        decoder = json.JSONDecoder()
-        start = stripped.find("{")
-        if start < 0:
-            return None
-        try:
-            obj, end = decoder.raw_decode(stripped[start:])
-        except Exception:
-            match = re.search(r"\{.*\}", stripped, re.DOTALL)
-            if not match:
-                return None
-            try:
-                obj = json.loads(match.group(0))
-            except Exception:
-                return None
-            return obj if isinstance(obj, dict) else None
-        trailing = stripped[start + end :].strip()
-        if trailing:
-            logger.warning("qwen_output_has_trailing_text trailing=%r", trailing[:160])
-        return obj if isinstance(obj, dict) else None
-
     def _is_http_url(self, value: str) -> bool:
         if not value.startswith(("http://", "https://")):
             return False
@@ -200,119 +168,6 @@ class QwenToolsClient:
     def _site_from_url(self, url: str) -> str:
         host = urlparse(url).netloc.lower()
         return host[4:] if host.startswith("www.") else host
-
-    def _collect_profile_pages_from_object(self, obj: Any) -> list[dict[str, Any]]:
-        pages: list[dict[str, Any]] = []
-        raw_pages = obj.get("profile_pages") if isinstance(obj, dict) else None
-        if not isinstance(raw_pages, list):
-            return pages
-        for item in raw_pages:
-            if not isinstance(item, dict):
-                continue
-            profile_url = str(item.get("profile_url") or item.get("url") or "").strip()
-            if not self._is_http_url(profile_url):
-                continue
-            confidence_raw = item.get("confidence")
-            confidence: float | None
-            if isinstance(confidence_raw, (int, float)):
-                confidence = float(confidence_raw)
-            else:
-                confidence = None
-            if confidence is not None and confidence < self._min_confidence:
-                continue
-            pages.append(
-                {
-                    "site": str(item.get("site") or self._site_from_url(profile_url)).strip(),
-                    "profile_url": profile_url,
-                    "reason": str(item.get("reason") or "qwen_profile_output").strip(),
-                    "confidence": confidence if confidence is not None else self._min_confidence,
-                }
-            )
-        return pages
-
-    def _extract_urls_from_any(self, obj: Any) -> list[str]:
-        urls: list[str] = []
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                if key in {"url", "profile_url", "link", "source_url"} and isinstance(value, str):
-                    urls.extend(match.group(0) for match in _URL_PATTERN.finditer(value))
-                else:
-                    urls.extend(self._extract_urls_from_any(value))
-        elif isinstance(obj, list):
-            for item in obj:
-                urls.extend(self._extract_urls_from_any(item))
-        elif isinstance(obj, str):
-            urls.extend(match.group(0) for match in _URL_PATTERN.finditer(obj))
-        return urls
-
-    def _collect_profile_pages_from_tool_calls(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
-        output = payload.get("output")
-        if not isinstance(output, list):
-            return []
-        pages: list[dict[str, Any]] = []
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            if "web_search" not in str(item.get("type") or ""):
-                continue
-            action = item.get("action")
-            if isinstance(action, dict):
-                sources = action.get("sources")
-                if isinstance(sources, list):
-                    for source in sources:
-                        if not isinstance(source, dict):
-                            continue
-                        source_url = str(source.get("url") or "").strip()
-                        if not self._is_http_url(source_url):
-                            continue
-                        pages.append(
-                            {
-                                "site": self._site_from_url(source_url),
-                                "profile_url": source_url,
-                                "reason": "web_search_action_source",
-                                "confidence": self._min_confidence,
-                            }
-                        )
-            raw_output = item.get("output")
-            parsed_output: Any = raw_output
-            if isinstance(raw_output, str):
-                try:
-                    parsed_output = json.loads(raw_output)
-                except Exception:
-                    parsed_output = raw_output
-            if isinstance(action, dict):
-                parsed_output = {"action": action, "output": parsed_output}
-            urls = self._extract_urls_from_any(parsed_output)
-            for url in urls:
-                if not self._is_http_url(url):
-                    continue
-                pages.append(
-                    {
-                        "site": self._site_from_url(url),
-                        "profile_url": url,
-                        "reason": "web_search_tool_call",
-                        "confidence": self._min_confidence,
-                    }
-                )
-        return pages
-
-    def _collect_profile_pages_from_text(self, response_text: str | None) -> list[dict[str, Any]]:
-        if not response_text:
-            return []
-        pages: list[dict[str, Any]] = []
-        for match in _URL_PATTERN.finditer(response_text):
-            url = match.group(0).rstrip(".,;)")
-            if not self._is_http_url(url):
-                continue
-            pages.append(
-                {
-                    "site": self._site_from_url(url),
-                    "profile_url": url,
-                    "reason": "response_text_fallback",
-                    "confidence": self._min_confidence,
-                }
-            )
-        return pages
 
     def _sanitize_profile_pages(self, pages: list[dict[str, Any]], max_count: int) -> list[dict[str, Any]]:
         deduped: list[dict[str, Any]] = []
@@ -339,33 +194,7 @@ class QwenToolsClient:
                 break
         return deduped
 
-    def _collect_images_from_object(self, obj: Any) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        raw_rows = obj.get("image_candidates") if isinstance(obj, dict) else None
-        if not isinstance(raw_rows, list):
-            return rows
-        for item in raw_rows:
-            if not isinstance(item, dict):
-                continue
-            image_url = str(item.get("image_url") or item.get("url") or "").strip()
-            if not self._is_http_url(image_url):
-                continue
-            confidence_raw = item.get("confidence")
-            confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else self._min_confidence
-            rows.append(
-                {
-                    "image_url": image_url,
-                    "source_url": str(item.get("source_url") or "").strip(),
-                    "title": str(item.get("title") or "").strip(),
-                    "snippet": str(item.get("snippet") or "").strip(),
-                    "reason": str(item.get("reason") or "qwen_image_output").strip(),
-                    "source_type": "qwen_web_search_image",
-                    "confidence": max(0.0, min(1.0, confidence)),
-                }
-            )
-        return rows
-
-    def _collect_images_from_tool_calls(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    def _collect_urls_from_tool_calls(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         output = payload.get("output")
         if not isinstance(output, list):
             return []
@@ -373,7 +202,7 @@ class QwenToolsClient:
         for item in output:
             if not isinstance(item, dict):
                 continue
-            if "web_search_image" not in str(item.get("type") or ""):
+            if str(item.get("type") or "") != "web_search_image_call":
                 continue
             raw_output = item.get("output")
             parsed_output: Any = raw_output
@@ -381,14 +210,16 @@ class QwenToolsClient:
                 try:
                     parsed_output = json.loads(raw_output)
                 except Exception:
-                    parsed_output = raw_output
-            if isinstance(parsed_output, list):
-                iterable: list[Any] = parsed_output
-            else:
-                iterable = [parsed_output]
-            for row in iterable:
+                    continue
+            stack: list[Any] = [parsed_output]
+            while stack:
+                row = stack.pop()
+                if isinstance(row, list):
+                    stack.extend(row)
+                    continue
                 if not isinstance(row, dict):
                     continue
+                stack.extend(row.values())
                 image_url = str(row.get("url") or row.get("image_url") or "").strip()
                 if not self._is_http_url(image_url):
                     continue
@@ -404,30 +235,6 @@ class QwenToolsClient:
                         "confidence": self._min_confidence,
                     }
                 )
-        return rows
-
-    def _collect_images_from_text(self, response_text: str | None) -> list[dict[str, Any]]:
-        if not response_text:
-            return []
-        rows: list[dict[str, Any]] = []
-        for match in _URL_PATTERN.finditer(response_text):
-            image_url = match.group(0).rstrip(".,;)")
-            if not self._is_http_url(image_url):
-                continue
-            lower = image_url.lower()
-            if not any(lower.endswith(ext) or f"{ext}?" in lower for ext in (".jpg", ".jpeg", ".png", ".webp")):
-                continue
-            rows.append(
-                {
-                    "image_url": image_url,
-                    "source_url": "",
-                    "title": "",
-                    "snippet": "",
-                    "reason": "response_text_image_fallback",
-                    "source_type": "qwen_web_search_image",
-                    "confidence": self._min_confidence,
-                }
-            )
         return rows
 
     def _sanitize_image_candidates(self, rows: list[dict[str, Any]], max_count: int) -> list[dict[str, Any]]:
@@ -527,9 +334,9 @@ class QwenToolsClient:
             "temperature": 0,
             "max_output_tokens": self._max_output_tokens,
             "response_format": self._build_response_format(),
-            "tools": ([{"type": "web_search"}] if self._enable_web_search else []),
+            "tools": ([{"type": "web_search_image"}] if self._enable_web_search else []),
         }
-        logger.info("qwen_web_search_profile_started author_id=%s model=%s", author.author_id, self._model)
+        logger.info("qwen_web_search_image_started author_id=%s model=%s", author.author_id, self._model)
         try:
             data, response_mode = self._post_responses(payload)
         except APIStatusError as exc:
@@ -547,49 +354,42 @@ class QwenToolsClient:
 
         response_text = self._extract_response_text(data)
         usage_total_tokens = self._extract_usage_total_tokens(data)
-
-        response_obj = self._extract_json_object(response_text or "") if response_text else None
-        profile_pages_from_text: list[dict[str, Any]] = []
-        images_from_text: list[dict[str, Any]] = []
-        invalid_output = False
-        if response_text and response_obj is None:
-            invalid_output = True
-        if isinstance(response_obj, dict):
-            profile_pages_from_text = self._collect_profile_pages_from_object(response_obj)
-            images_from_text = self._collect_images_from_object(response_obj)
-            if not profile_pages_from_text and not isinstance(response_obj.get("profile_pages"), list):
-                invalid_output = True
-
-        profile_pages_from_tool = self._collect_profile_pages_from_tool_calls(data)
-        profile_pages_from_fallback = self._collect_profile_pages_from_text(response_text)
-        images_from_tool = self._collect_images_from_tool_calls(data)
-        images_from_fallback = self._collect_images_from_text(response_text)
+        rows_from_tool = self._collect_urls_from_tool_calls(data)
+        deduped_images = self._sanitize_image_candidates(rows_from_tool, max_count=self._max_candidates)
         deduped_pages = self._sanitize_profile_pages(
-            profile_pages_from_text + profile_pages_from_tool + profile_pages_from_fallback,
+            [
+                {
+                    "site": self._site_from_url(source_url),
+                    "profile_url": source_url,
+                    "reason": "web_search_image_source_url",
+                    "confidence": self._min_confidence,
+                }
+                for source_url in (str(row.get("source_url") or "").strip() for row in deduped_images)
+                if self._is_http_url(source_url)
+            ],
             max_count=min(self._max_candidates, 5),
-        )
-        deduped_images = self._sanitize_image_candidates(
-            images_from_text + images_from_tool + images_from_fallback,
-            max_count=self._max_candidates,
         )
 
         raw_content = json.dumps(data, ensure_ascii=False)[:4000]
         response_text_short = (response_text or "")[:4000] or None
-        if not deduped_pages and not deduped_images:
-            reason = "qwen_profile_search_invalid_output" if invalid_output else "qwen_web_search_no_profile_pages"
+        if not deduped_images:
             return QwenSearchResult(
                 profile_pages=[],
                 image_candidates=[],
                 filtered_candidates=[],
-                failure_reason=reason,
+                failure_reason="qwen_web_search_image_no_results",
                 raw_content=raw_content,
                 response_text=response_text_short,
                 response_format_mode=response_mode,
-                abandon_reason_log="web_search returned no usable profile pages",
+                abandon_reason_log="web_search_image returned no usable image urls",
                 usage_total_tokens=usage_total_tokens,
             )
 
-        logger.info("qwen_web_search_profile_finished author_id=%s profile_pages=%s", author.author_id, len(deduped_pages))
+        logger.info(
+            "qwen_web_search_image_finished author_id=%s image_candidates=%s",
+            author.author_id,
+            len(deduped_images),
+        )
         return QwenSearchResult(
             profile_pages=deduped_pages,
             image_candidates=deduped_images,
