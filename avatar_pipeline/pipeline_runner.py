@@ -117,31 +117,49 @@ class PipelineRunner:
         self._log_step(author, "load_author", has_existing_avatar=bool(existing_avatar))
         max_attempts = 2
         attempt = 1
-        self._log_step(author, "qwen_search_profile_start", provider_mode="qwen_web_search", attempt=attempt, max_attempts=max_attempts)
+        self._log_step(
+            author,
+            "qwen_search_image_start",
+            provider_mode="qwen_web_search_image",
+            attempt=attempt,
+            max_attempts=max_attempts,
+        )
         outcome = self._web_search.search_author(author)
         while outcome.failure_reason == "qwen_request_timeout" and attempt < max_attempts:
             attempt += 1
-            self._log_step(author, "qwen_search_profile_retry", failure_reason=outcome.failure_reason, attempt=attempt, max_attempts=max_attempts)
+            self._log_step(
+                author,
+                "qwen_search_image_retry",
+                failure_reason=outcome.failure_reason,
+                attempt=attempt,
+                max_attempts=max_attempts,
+            )
             time.sleep(3)
             outcome = self._web_search.search_author(author)
         self._log_step(
             author,
-            "qwen_search_profile_done",
+            "qwen_search_image_done",
             profile_pages=len(outcome.profile_pages),
             image_candidates=len(outcome.image_candidates),
             filtered_candidates=len(outcome.filtered_candidates),
             failure_reason=outcome.failure_reason,
             attempts=attempt,
+            provider_mode="qwen_web_search_image",
         )
         if not outcome.candidates:
-            failure_reason = outcome.failure_reason or "profile_pages_no_image_candidates"
-            self._log_step(author, "profile_search_empty", failure_reason=failure_reason)
+            failure_reason = outcome.failure_reason or "qwen_web_search_image_no_candidates"
+            self._log_step(author, "qwen_search_empty", failure_reason=failure_reason)
             return self._failure_result(author, outcome, failure_reason)
 
         selected = outcome.candidates[0]
         selected = self._web_search.enrich_candidate_image_metadata(selected, self._config.allowed_mime)
         selected_dict = self._candidate_to_dict(selected)
-        self._log_step(author, "select_first_profile_image", image_url=selected.image_url, source_url=selected.source_url)
+        self._log_step(
+            author,
+            "select_first_extracted_url",
+            image_url=selected.image_url,
+            source_url=selected.source_url,
+        )
         if selected.is_valid_image is False:
             failure_reason = selected.invalid_reason or "invalid_image"
             self._log_step(author, "selected_candidate_invalid", failure_reason=failure_reason)
