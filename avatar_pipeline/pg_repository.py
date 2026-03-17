@@ -90,7 +90,14 @@ class PgRepository(AbstractContextManager["PgRepository"]):
                 records.append(record)
         return records
 
-    def list_author_records(self, limit: int | None = None, offset: int = 0) -> list[AuthorRecord]:
+    def list_author_records(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        *,
+        start_author_id: str | None = None,
+        start_exclusive: bool = False,
+    ) -> list[AuthorRecord]:
         sql = """
         SELECT
             aa.id AS author_id,
@@ -100,9 +107,13 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         FROM public.authors_analysis aa
         LEFT JOIN public.author_last_known_institution alk
             ON alk.author_id = aa.id
-        ORDER BY aa.id
         """
         params: list[Any] = []
+        if start_author_id:
+            comparator = ">" if start_exclusive else ">="
+            sql += f" WHERE aa.id::text {comparator} %s"
+            params.append(start_author_id)
+        sql += " ORDER BY aa.id"
         if limit is not None and limit > 0:
             sql += " LIMIT %s"
             params.append(limit)

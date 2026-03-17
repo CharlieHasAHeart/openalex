@@ -117,6 +117,12 @@ class LocalRunStore:
         with self._lock:
             return set(self._processed_author_ids)
 
+    def max_processed_author_id(self) -> str | None:
+        with self._lock:
+            if not self._processed_author_ids:
+                return None
+            return max(self._processed_author_ids)
+
     def set_run_scope(
         self,
         source_total_authors: int,

@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--author-ids-file", default="", help="Path to JSON/JSONL file containing author_id values.")
     parser.add_argument("--author-limit", type=int, default=0, help="Limit authors loaded from DB author input set. 0 means all.")
     parser.add_argument("--author-offset", type=int, default=0, help="Skip first N authors in DB author input set.")
+    parser.add_argument("--author-id-start", default="", help="Start DB scan from this author_id (inclusive).")
     parser.add_argument("--workers", type=int, default=1, help="Worker threads for concurrent processing. 1 means serial.")
     parser.add_argument("--progress-every", type=int, default=50, help="Emit progress log every N authors. 0 disables progress logs.")
     parser.add_argument("--runs-dir", default="runs", help="Directory for local run artifacts.")
@@ -82,6 +83,21 @@ def _load_author_ids_from_file(path: str) -> list[str]:
         elif isinstance(item, str) and item.strip():
             author_ids.append(item.strip())
     return author_ids
+
+
+def _resolve_db_scan_cursor(
+    user_start_author_id: str | None,
+    resume_max_processed_author_id: str | None,
+) -> tuple[str | None, bool]:
+    if user_start_author_id and resume_max_processed_author_id:
+        if user_start_author_id > resume_max_processed_author_id:
+            return user_start_author_id, False
+        return resume_max_processed_author_id, True
+    if user_start_author_id:
+        return user_start_author_id, False
+    if resume_max_processed_author_id:
+        return resume_max_processed_author_id, True
+    return None, False
 
 
 def _create_runner(config, limiter, run_store):
@@ -260,30 +276,7 @@ def main() -> int:
 
     requested_author_ids = [item.strip() for item in args.author_id if item.strip()] + file_author_ids
     has_requested_author_ids = bool(requested_author_ids)
-
-    with PgRepository(
-        host=config.pghost,
-        port=config.pgport,
-        database=config.pgdatabase,
-        user=config.pguser,
-        password=config.pgpassword,
-        sslmode=config.pgsslmode,
-    ) as repository:
-        if has_requested_author_ids:
-            normalized_requested_ids = _build_author_id_candidates(set(requested_author_ids))
-            authors = repository.list_author_records_by_ids(normalized_requested_ids)
-        else:
-            limit = args.author_limit if args.author_limit > 0 else None
-            authors = repository.list_author_records(limit=limit, offset=max(args.author_offset, 0))
-
-    loaded_author_count = len(authors)
-    logger.info(
-        "pipeline_run_loaded_authors total=%s explicit=%s workers=%s runs_dir=%s",
-        loaded_author_count,
-        has_requested_author_ids,
-        max(1, args.workers),
-        args.runs_dir,
-    )
+    user_start_author_id = args.author_id_start.strip() or None
 
     run_store = LocalRunStore(
         base_dir=args.runs_dir,
@@ -299,6 +292,42 @@ def main() -> int:
         },
     )
     resume_processed = run_store.processed_author_ids()
+    resume_max_processed_author_id = run_store.max_processed_author_id() if args.resume_run_id.strip() else None
+    db_cursor_author_id, db_cursor_exclusive = _resolve_db_scan_cursor(
+        user_start_author_id=user_start_author_id,
+        resume_max_processed_author_id=resume_max_processed_author_id,
+    )
+
+    with PgRepository(
+        host=config.pghost,
+        port=config.pgport,
+        database=config.pgdatabase,
+        user=config.pguser,
+        password=config.pgpassword,
+        sslmode=config.pgsslmode,
+    ) as repository:
+        if has_requested_author_ids:
+            normalized_requested_ids = _build_author_id_candidates(set(requested_author_ids))
+            authors = repository.list_author_records_by_ids(normalized_requested_ids)
+        else:
+            limit = args.author_limit if args.author_limit > 0 else None
+            authors = repository.list_author_records(
+                limit=limit,
+                offset=max(args.author_offset, 0),
+                start_author_id=db_cursor_author_id,
+                start_exclusive=db_cursor_exclusive,
+            )
+
+    loaded_author_count = len(authors)
+    logger.info(
+        "pipeline_run_loaded_authors total=%s explicit=%s workers=%s runs_dir=%s db_cursor_author_id=%s db_cursor_exclusive=%s",
+        loaded_author_count,
+        has_requested_author_ids,
+        max(1, args.workers),
+        args.runs_dir,
+        db_cursor_author_id,
+        db_cursor_exclusive,
+    )
     if resume_processed:
         authors = [author for author in authors if author.author_id not in resume_processed]
     scheduled_author_count = len(authors)
@@ -317,6 +346,9 @@ def main() -> int:
             "explicit_author_ids": len(requested_author_ids),
             "author_offset": max(args.author_offset, 0),
             "author_limit": args.author_limit,
+            "author_id_start": user_start_author_id,
+            "db_cursor_author_id": db_cursor_author_id,
+            "db_cursor_exclusive": db_cursor_exclusive,
             "resume_run_id": args.resume_run_id.strip() or None,
             "already_processed": len(resume_processed),
         },
@@ -359,6 +391,9 @@ def main() -> int:
             "explicit_author_ids": len(requested_author_ids),
             "author_offset": max(args.author_offset, 0),
             "author_limit": args.author_limit,
+            "author_id_start": user_start_author_id,
+            "db_cursor_author_id": db_cursor_author_id,
+            "db_cursor_exclusive": db_cursor_exclusive,
             "resume_run_id": args.resume_run_id.strip() or None,
             "already_processed": len(resume_processed),
             "remaining_after_filter": scheduled_author_count,
