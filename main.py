@@ -20,8 +20,8 @@ def parse_args() -> argparse.Namespace:
         help="Specific OpenAlex author id (URL or A-ID). Can repeat.",
     )
     parser.add_argument("--author-ids-file", default="", help="Path to JSON/JSONL file containing author_id values.")
-    parser.add_argument("--author-limit", type=int, default=0, help="Limit authors loaded from DB authors_analysis table. 0 means all.")
-    parser.add_argument("--author-offset", type=int, default=0, help="Skip first N authors from DB authors_analysis table.")
+    parser.add_argument("--author-limit", type=int, default=0, help="Limit authors loaded from DB author input set. 0 means all.")
+    parser.add_argument("--author-offset", type=int, default=0, help="Skip first N authors in DB author input set.")
     parser.add_argument("--workers", type=int, default=1, help="Worker threads for concurrent processing. 1 means serial.")
     parser.add_argument("--progress-every", type=int, default=50, help="Emit progress log every N authors. 0 disables progress logs.")
     parser.add_argument("--runs-dir", default="runs", help="Directory for local run artifacts.")
@@ -45,9 +45,9 @@ def _build_author_id_candidates(raw_ids: set[str]) -> list[str]:
             continue
         candidates.add(cleaned)
         if cleaned.startswith("http://") or cleaned.startswith("https://"):
-            tail = urlparse(cleaned).path.rsplit("/", 1)[-1].strip()
-            if tail:
-                candidates.add(tail)
+            candidate_id = urlparse(cleaned).path.rsplit("/", 1)[-1].strip()
+            if candidate_id:
+                candidates.add(candidate_id)
     return sorted(candidates)
 
 
@@ -76,8 +76,9 @@ def _load_author_ids_from_file(path: str) -> list[str]:
     for item in rows:
         if isinstance(item, dict):
             author_id = item.get("author_id")
-            if author_id is not None and str(author_id).strip():
-                author_ids.append(str(author_id).strip())
+            author_id_text = str(author_id).strip() if author_id is not None else ""
+            if author_id_text:
+                author_ids.append(author_id_text)
         elif isinstance(item, str) and item.strip():
             author_ids.append(item.strip())
     return author_ids
@@ -90,7 +91,7 @@ def _create_runner(config, limiter, run_store):
     from avatar_pipeline.pipeline_runner import PipelineRunner
     from avatar_pipeline.web_search_client import WebSearchClient
 
-    http = HttpClient(
+    http_client = HttpClient(
         timeout_seconds=config.request_timeout_seconds,
         max_retries=config.max_retries,
         rate_limiter=limiter,
@@ -100,7 +101,7 @@ def _create_runner(config, limiter, run_store):
         retry_429_min_delay_seconds=config.retry_429_min_delay_seconds,
     )
     web_search_client = WebSearchClient(
-        http=http,
+        http=http_client,
         max_candidates=config.qwen_max_candidates,
         qwen_api_key=config.qwen_api_key,
         qwen_base_url=config.qwen_base_url,
@@ -122,7 +123,7 @@ def _create_runner(config, limiter, run_store):
         key_prefix=config.aliyun_oss_key_prefix,
         cache_control=config.aliyun_oss_cache_control,
     )
-    repository = PgRepository(
+    pg_repository = PgRepository(
         host=config.pghost,
         port=config.pgport,
         database=config.pgdatabase,
@@ -134,10 +135,10 @@ def _create_runner(config, limiter, run_store):
         config=config,
         web_search_client=web_search_client,
         oss_uploader=oss_uploader,
-        pg_repository=repository,
+        pg_repository=pg_repository,
         run_store=run_store,
     )
-    return runner, repository
+    return runner, pg_repository
 
 
 def _maybe_log_progress(
@@ -258,8 +259,8 @@ def main() -> int:
             logger.exception("author_ids_file_load_failed path=%s error=%s", args.author_ids_file, exc)
             return 2
 
-    explicit_author_ids = [item.strip() for item in args.author_id if item.strip()] + file_author_ids
-    has_explicit_authors = bool(explicit_author_ids)
+    requested_author_ids = [item.strip() for item in args.author_id if item.strip()] + file_author_ids
+    has_requested_author_ids = bool(requested_author_ids)
 
     with PgRepository(
         host=config.pghost,
@@ -269,19 +270,18 @@ def main() -> int:
         password=config.pgpassword,
         sslmode=config.pgsslmode,
     ) as repository:
-        if has_explicit_authors:
-            requested_ids = _build_author_id_candidates(set(explicit_author_ids))
-            authors = repository.list_author_records_from_authors_analysis_by_ids(requested_ids)
+        if has_requested_author_ids:
+            normalized_requested_ids = _build_author_id_candidates(set(requested_author_ids))
+            authors = repository.list_author_records_by_ids(normalized_requested_ids)
         else:
             limit = args.author_limit if args.author_limit > 0 else None
-            authors = repository.list_author_records_from_authors_analysis(limit=limit, offset=max(args.author_offset, 0))
+            authors = repository.list_author_records(limit=limit, offset=max(args.author_offset, 0))
 
-    total = len(authors)
-    source_total = len(authors)
+    loaded_author_count = len(authors)
     logger.info(
         "pipeline_run_loaded_authors total=%s explicit=%s workers=%s runs_dir=%s",
-        source_total,
-        has_explicit_authors,
+        loaded_author_count,
+        has_requested_author_ids,
         max(1, args.workers),
         args.runs_dir,
     )
@@ -302,20 +302,20 @@ def main() -> int:
     resume_processed = run_store.processed_author_ids()
     if resume_processed:
         authors = [author for author in authors if author.author_id not in resume_processed]
-    total = len(authors)
+    scheduled_author_count = len(authors)
     if args.resume_run_id.strip():
         logger.info(
             "pipeline_run_resume_loaded run_id=%s source_total=%s already_processed=%s remaining=%s",
             run_store.run_id,
-            source_total,
+            loaded_author_count,
             len(resume_processed),
-            total,
+            scheduled_author_count,
         )
     run_store.set_run_scope(
-        source_total_authors=source_total,
-        scheduled_authors=total,
+        source_total_authors=loaded_author_count,
+        scheduled_authors=scheduled_author_count,
         input_summary={
-            "explicit_author_ids": len(explicit_author_ids),
+            "explicit_author_ids": len(requested_author_ids),
             "author_offset": max(args.author_offset, 0),
             "author_limit": args.author_limit,
             "resume_run_id": args.resume_run_id.strip() or None,
@@ -333,7 +333,7 @@ def main() -> int:
                 authors=authors,
                 progress_every=max(args.progress_every, 0),
                 logger=logger,
-                total=total,
+                total=scheduled_author_count,
                 start_monotonic=start_monotonic,
             )
         finally:
@@ -347,28 +347,28 @@ def main() -> int:
             workers=max(1, args.workers),
             progress_every=max(args.progress_every, 0),
             logger=logger,
-            total=total,
+            total=scheduled_author_count,
             start_monotonic=start_monotonic,
         )
 
     elapsed_seconds = time.monotonic() - start_monotonic
     run_store.finalize(
         stats=dict(stats),
-        total_authors=source_total,
+        total_authors=loaded_author_count,
         elapsed_seconds=elapsed_seconds,
         input_summary={
-            "explicit_author_ids": len(explicit_author_ids),
+            "explicit_author_ids": len(requested_author_ids),
             "author_offset": max(args.author_offset, 0),
             "author_limit": args.author_limit,
             "resume_run_id": args.resume_run_id.strip() or None,
             "already_processed": len(resume_processed),
-            "remaining_after_filter": total,
+            "remaining_after_filter": scheduled_author_count,
         },
     )
     logger.info(
         "pipeline_run_finished run_id=%s total=%s elapsed_seconds=%.2f stats=%s",
         run_store.run_id,
-        total,
+        scheduled_author_count,
         elapsed_seconds,
         dict(stats),
     )
