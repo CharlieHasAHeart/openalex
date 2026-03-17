@@ -54,3 +54,4 @@ class PipelineResult:
     raw_content: str | None = None
     response_text: str | None = None
     abandon_reason_log: str | None = None
+    usage_total_tokens: int | None = None

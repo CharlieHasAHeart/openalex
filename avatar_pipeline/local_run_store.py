@@ -27,6 +27,8 @@ class LocalRunStore:
         self._success_count = 0
         self._status_counts: Counter[str] = Counter()
         self._processed_author_ids: set[str] = set()
+        self._usage_total_tokens_sum = 0
+        self._usage_total_tokens_count = 0
         self._source_total_authors = 0
         self._scheduled_authors = 0
         self._input_summary: dict[str, Any] = {}
@@ -103,6 +105,10 @@ class LocalRunStore:
                             self._success_count += 1
                         else:
                             self._failure_count += 1
+                    usage_total_tokens = row.get("usage_total_tokens")
+                    if isinstance(usage_total_tokens, int) and usage_total_tokens >= 0:
+                        self._usage_total_tokens_sum += usage_total_tokens
+                        self._usage_total_tokens_count += 1
                     self._author_count += 1
         except Exception:
             return
@@ -179,6 +185,7 @@ class LocalRunStore:
             "content_sha256": result.content_sha256,
             "raw_content": result.raw_content,
             "response_text": result.response_text,
+            "usage_total_tokens": result.usage_total_tokens,
             "timestamp": timestamp,
         }
         line = json.dumps(row, ensure_ascii=False) + "\n"
@@ -186,6 +193,9 @@ class LocalRunStore:
             self._author_count += 1
             self._processed_author_ids.add(author.author_id)
             self._status_counts[result.status] += 1
+            if isinstance(result.usage_total_tokens, int) and result.usage_total_tokens >= 0:
+                self._usage_total_tokens_sum += result.usage_total_tokens
+                self._usage_total_tokens_count += 1
             with self.author_runs_path.open("a", encoding="utf-8") as f:
                 f.write(line)
             if result.status == "ok":
@@ -211,6 +221,11 @@ class LocalRunStore:
             remaining = max(0, self._source_total_authors - self._author_count)
         else:
             remaining = max(0, progress_total - progress_done)
+        usage_avg = (
+            self._usage_total_tokens_sum / self._usage_total_tokens_count
+            if self._usage_total_tokens_count > 0
+            else None
+        )
         payload = {
             "run_id": self.run_id,
             "run_date": self.run_date,
@@ -230,6 +245,9 @@ class LocalRunStore:
             "last_status": last_status,
             "progress_done": progress_done,
             "progress_total": progress_total,
+            "usage_total_tokens_sum": self._usage_total_tokens_sum,
+            "usage_total_tokens_count": self._usage_total_tokens_count,
+            "usage_total_tokens_avg": round(usage_avg, 3) if usage_avg is not None else None,
             "config_snapshot": self._config_snapshot,
             "input_summary": self._input_summary,
             "files": {

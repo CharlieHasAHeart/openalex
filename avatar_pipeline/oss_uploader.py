@@ -35,7 +35,8 @@ class OssUploader:
     def build_object_key(self, orcid: str, sha256: str, mime: str) -> str:
         orcid_key = orcid.strip().replace("/", "_")
         ext = mime_to_ext(mime)
-        return f"authors/{orcid_key}/{sha256}.{ext}"
+        prefix = f"{self._key_prefix}/" if self._key_prefix else ""
+        return f"{prefix}authors/{orcid_key}/{sha256}.{ext}"
 
     def upload(self, object_key: str, content: bytes, mime: str) -> str:
         headers = {"Content-Type": mime}

@@ -110,6 +110,12 @@ def _create_runner(config, limiter, run_store):
         qwen_min_call_interval_seconds=config.qwen_min_call_interval_seconds,
         qwen_enable_web_search=config.qwen_enable_web_search,
         qwen_min_confidence=config.qwen_min_confidence,
+        qwen_max_output_tokens=config.qwen_max_output_tokens,
+        qwen_sdk_max_retries=config.qwen_sdk_max_retries,
+        profile_page_fetch_timeout_seconds=config.profile_page_fetch_timeout_seconds,
+        profile_page_max_count=config.profile_page_max_count,
+        profile_image_max_per_page=config.profile_image_max_per_page,
+        profile_image_min_score=config.profile_image_min_score,
     )
     oss_uploader = OssUploader(
         access_key_id=config.aliyun_oss_access_key_id,
@@ -291,8 +297,10 @@ def main() -> int:
             "qwen_model": config.qwen_model,
             "qwen_enable_web_search": config.qwen_enable_web_search,
             "qwen_min_confidence": config.qwen_min_confidence,
+            "qwen_max_output_tokens": config.qwen_max_output_tokens,
             "qwen_max_candidates": config.qwen_max_candidates,
             "qwen_min_call_interval_seconds": config.qwen_min_call_interval_seconds,
+            "qwen_sdk_max_retries": config.qwen_sdk_max_retries,
         },
     )
     resume_processed = run_store.processed_author_ids()

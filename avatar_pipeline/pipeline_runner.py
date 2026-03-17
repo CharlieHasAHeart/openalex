@@ -73,6 +73,8 @@ class PipelineRunner:
         return {
             "image_url": candidate.image_url,
             "source_url": candidate.source_url,
+            "linked_profile_url": candidate.linked_profile_url,
+            "linked_profile_domain": candidate.linked_profile_domain,
             "title": candidate.title,
             "snippet": candidate.snippet,
             "mime": candidate.mime,
@@ -81,6 +83,9 @@ class PipelineRunner:
             "size_bytes": candidate.size_bytes,
             "is_valid_image": candidate.is_valid_image,
             "invalid_reason": candidate.invalid_reason,
+            "score": candidate.score,
+            "source_type": candidate.source_type,
+            "alt_text": candidate.alt_text,
         }
 
     def _failure_result(
@@ -104,6 +109,7 @@ class PipelineRunner:
             raw_content=outcome.raw_content,
             response_text=outcome.response_text,
             abandon_reason_log=outcome.abandon_reason_log,
+            usage_total_tokens=outcome.usage_total_tokens,
         )
 
     def _process(self, author: AuthorRecord) -> PipelineResult:
@@ -111,30 +117,31 @@ class PipelineRunner:
         self._log_step(author, "load_author", has_existing_avatar=bool(existing_avatar))
         max_attempts = 2
         attempt = 1
-        self._log_step(author, "qwen_search_image_start", provider_mode="qwen_web_search_image", attempt=attempt, max_attempts=max_attempts)
+        self._log_step(author, "qwen_search_profile_start", provider_mode="qwen_web_search", attempt=attempt, max_attempts=max_attempts)
         outcome = self._web_search.search_author(author)
         while outcome.failure_reason == "qwen_request_timeout" and attempt < max_attempts:
             attempt += 1
-            self._log_step(author, "qwen_search_image_retry", failure_reason=outcome.failure_reason, attempt=attempt, max_attempts=max_attempts)
+            self._log_step(author, "qwen_search_profile_retry", failure_reason=outcome.failure_reason, attempt=attempt, max_attempts=max_attempts)
             time.sleep(3)
             outcome = self._web_search.search_author(author)
         self._log_step(
             author,
-            "qwen_search_image_done",
+            "qwen_search_profile_done",
+            profile_pages=len(outcome.profile_pages),
             image_candidates=len(outcome.image_candidates),
             filtered_candidates=len(outcome.filtered_candidates),
             failure_reason=outcome.failure_reason,
             attempts=attempt,
         )
         if not outcome.candidates:
-            failure_reason = outcome.failure_reason or "qwen_web_search_image_no_candidates"
-            self._log_step(author, "qwen_search_empty", failure_reason=failure_reason)
+            failure_reason = outcome.failure_reason or "profile_pages_no_image_candidates"
+            self._log_step(author, "profile_search_empty", failure_reason=failure_reason)
             return self._failure_result(author, outcome, failure_reason)
 
         selected = outcome.candidates[0]
         selected = self._web_search.enrich_candidate_image_metadata(selected, self._config.allowed_mime)
         selected_dict = self._candidate_to_dict(selected)
-        self._log_step(author, "select_first_extracted_url", image_url=selected.image_url)
+        self._log_step(author, "select_first_profile_image", image_url=selected.image_url, source_url=selected.source_url)
         if selected.is_valid_image is False:
             failure_reason = selected.invalid_reason or "invalid_image"
             self._log_step(author, "selected_candidate_invalid", failure_reason=failure_reason)
@@ -175,7 +182,7 @@ class PipelineRunner:
         sha256 = sha256_hex(image_bytes)
         if existing_avatar and existing_avatar.get("content_sha256") == sha256 and existing_avatar.get("oss_object_key"):
             self._log_step(author, "reuse_existing_avatar", content_sha256=sha256, oss_url=existing_avatar.get("oss_url"))
-            return PipelineResult(
+            result = PipelineResult(
                 author_id=author.author_id,
                 status="ok",
                 commons_file=selected.source_url,
@@ -189,7 +196,11 @@ class PipelineRunner:
                 raw_content=outcome.raw_content,
                 response_text=outcome.response_text,
                 abandon_reason_log=outcome.abandon_reason_log,
+                usage_total_tokens=outcome.usage_total_tokens,
             )
+            # Refresh updated_at/commons_file/oss_url to keep DB row consistent with current run.
+            self._repo.upsert_result(result)
+            return result
 
         self._log_step(author, "upload_oss_start", content_sha256=sha256)
         object_key = self._oss.build_object_key(author.orcid or author.author_id, sha256, actual_mime)
@@ -209,6 +220,7 @@ class PipelineRunner:
             raw_content=outcome.raw_content,
             response_text=outcome.response_text,
             abandon_reason_log=outcome.abandon_reason_log,
+            usage_total_tokens=outcome.usage_total_tokens,
         )
         self._log_step(author, "upsert_authors_avatars_start")
         self._repo.upsert_result(result)
