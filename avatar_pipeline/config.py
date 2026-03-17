@@ -82,7 +82,6 @@ class PipelineConfig:
     retry_429_min_delay_seconds: float
     qwen_api_key: str | None
     qwen_base_url: str
-    qwen_response_path: str
     qwen_model: str
     qwen_enable_web_search: bool
     qwen_max_candidates: int
@@ -123,7 +122,6 @@ class PipelineConfig:
             retry_429_min_delay_seconds=float(_get_env("RETRY_429_MIN_DELAY_SECONDS", "8")),
             qwen_api_key=_get_env_any(("LLM_API_KEY", "QWEN_API_KEY"), required=True),
             qwen_base_url=_get_env_any(("LLM_BASE_URL", "QWEN_BASE_URL"), required=True),
-            qwen_response_path=_get_env("QWEN_RESPONSE_PATH", "/responses"),
             qwen_model=_get_env_any(("LLM_MODEL", "QWEN_MODEL"), required=True),
             qwen_enable_web_search=_bool_env("QWEN_ENABLE_WEB_SEARCH", True),
             qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "3")),

@@ -69,7 +69,6 @@ class WebSearchClient:
         max_candidates: int,
         qwen_api_key: str | None,
         qwen_base_url: str,
-        qwen_response_path: str,
         qwen_model: str,
         qwen_timeout_seconds: int,
         qwen_min_call_interval_seconds: float,
@@ -94,7 +93,6 @@ class WebSearchClient:
             max_output_tokens=qwen_max_output_tokens,
             sdk_max_retries=qwen_sdk_max_retries,
         )
-        _ = qwen_response_path
         self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen_web_search_image", "reason_tags": []}
 
     def provider_mode(self) -> str:

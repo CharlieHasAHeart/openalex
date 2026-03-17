@@ -105,7 +105,6 @@ def _create_runner(config, limiter, run_store):
         max_candidates=config.qwen_max_candidates,
         qwen_api_key=config.qwen_api_key,
         qwen_base_url=config.qwen_base_url,
-        qwen_response_path=config.qwen_response_path,
         qwen_model=config.qwen_model,
         qwen_timeout_seconds=config.qwen_timeout_seconds,
         qwen_min_call_interval_seconds=config.qwen_min_call_interval_seconds,

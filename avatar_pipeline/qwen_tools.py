@@ -42,10 +42,6 @@ class QwenSearchResult:
     abandon_reason_log: str | None = None
     usage_total_tokens: int | None = None
 
-    @property
-    def profile_pages(self) -> list[dict[str, Any]]:
-        return self.source_pages
-
 
 class QwenToolsClient:
     def __init__(
