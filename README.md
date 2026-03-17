@@ -115,7 +115,7 @@ runs/<date>/<run_id>/
 - `QWEN_MAX_CANDIDATES`（默认 `3`）
 - `QWEN_MIN_CONFIDENCE`（默认 `0.55`）
 - `QWEN_MAX_OUTPUT_TOKENS`（默认 `256`）
-- `QWEN_TIMEOUT_SECONDS`（默认 `120`）
+- `QWEN_TIMEOUT_SECONDS`（默认 `45`）
 - `QWEN_MIN_CALL_INTERVAL_SECONDS`（默认 `0`）
 - `QWEN_SDK_MAX_RETRIES`（默认 `0`）
 
@@ -151,4 +151,3 @@ python3 main.py --author-limit 1000 --author-offset 0 --workers 4
 - `source_pages` 仅用于审计透传，不参与抓取
 - 项目不包含 profile page 二次抽图流程
 - 主链候选仅来自 `web_search_image` tool output
-

@@ -127,7 +127,7 @@ class PipelineConfig:
             qwen_max_candidates=int(_get_env("QWEN_MAX_CANDIDATES", "3")),
             qwen_min_confidence=float(_get_env("QWEN_MIN_CONFIDENCE", "0.55")),
             qwen_max_output_tokens=int(_get_env("QWEN_MAX_OUTPUT_TOKENS", "256")),
-            qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "120")),
+            qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "45")),
             qwen_min_call_interval_seconds=float(_get_env("QWEN_MIN_CALL_INTERVAL_SECONDS", "0")),
             qwen_sdk_max_retries=int(_get_env("QWEN_SDK_MAX_RETRIES", "0")),
         )
