@@ -42,13 +42,17 @@ class PipelineResult:
     oss_object_key: str | None = None
     oss_url: str | None = None
     selected_candidate: dict[str, Any] | None = None
-    ranked_candidates: list[dict[str, Any]] = field(default_factory=list)
-    # Debug pass-through pages derived from tool output source URLs.
-    profile_pages: list[dict[str, Any]] = field(default_factory=list)
+    # Debug pass-through source pages derived from tool output source URLs.
+    source_pages: list[dict[str, Any]] = field(default_factory=list)
+    # Tool-output candidate rows after normalization/dedupe.
     image_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # Final candidate rows after max-candidate filtering.
     filtered_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # Raw response payload snapshot for run audit.
     raw_content: str | None = None
     # Debug/audit text only; candidate selection is tool-output driven.
     response_text: str | None = None
+    # Optional explanatory string from upstream early-abandon handling.
     abandon_reason_log: str | None = None
+    # Response usage accounting for run audit and cost monitoring.
     usage_total_tokens: int | None = None
