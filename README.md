@@ -1,163 +1,52 @@
 # OpenAlex Avatar Pipeline
 
-当前主链路：
+本项目已完全切换到当前新链路：
 
-`load author -> qwen web_search 查找 profile pages -> 本地抓取 profile page HTML -> 抽取候选头像图片 -> 本地评分排序 -> 取第1张 -> upload oss -> upsert public.authors_avatars -> write local run record`
+`DB input -> Qwen web_search_image tool output -> candidate normalization/dedupe -> first candidate -> image validation -> OSS upload -> DB upsert -> local run audit`
 
-## 当前架构
+## 输入源与输入字段
 
-- 搜索与候选发现使用 `qwen3.5-plus Responses API`
-- Qwen 只用 `web_search` 找 `profile_pages`，不直接返回图片 URL
-- profile page 发现优先依赖 `author.orcid`（无 ORCID 时保守失败）
-- 候选图来自本地 HTML 抽取：
-  - `meta[property="og:image"]`
-  - `meta[name="twitter:image"]`
-  - `img src`
-  - `srcset`
-- 本地打分后生成：
-  - `image_candidates`（全量抽取候选）
-  - `filtered_candidates`（排序+阈值后的候选）
-- 主链默认使用 `filtered_candidates` 的第 1 张
-- 保留 runs 审计字段：
-  - `profile_pages`
-  - `image_candidates`
-  - `filtered_candidates`
-  - `selected_candidate`
-  - `raw_content`
-  - `response_text`
+作者输入来自两张表：
 
-## 判断逻辑流程图
+- `public.authors_analysis`
+- `public.author_last_known_institution`
 
-```mermaid
-flowchart TD
-    A[Load author from authors_analysis] --> B[Qwen web_search profile pages]
-    B --> C{profile_pages non-empty?}
-    C -- No --> Z1[Fail: qwen_web_search_no_profile_pages]
-    C -- Yes --> D[Fetch profile HTML + extract images]
-    D --> E{filtered_candidates non-empty?}
-    E -- No --> Z2[Fail: profile_pages_no_image_candidates]
-    E -- Yes --> F[Select first profile image]
-    F --> G{Image downloadable and valid?}
-    G -- No --> Z3[Fail: invalid_image]
-    G -- Yes --> H[Upload OSS]
-    H --> I[Upsert public.authors_avatars]
-    I --> J[Write runs summary/author/successes/failures]
-```
+输入字段（进入 pipeline 的 `AuthorRecord`）：
 
-## 目录
+- `author_id`
+- `display_name`
+- `orcid`（在代码中由 `orcid_url` property 归一化得到）
+- `institution_name`
 
-- `main.py`: CLI 入口
-- `avatar_pipeline/qwen_tools.py`: Qwen `web_search` 调用与 `profile_pages` 提取
-- `avatar_pipeline/profile_image_extractor.py`: profile page HTML 抽图与候选打分
-- `avatar_pipeline/web_search_client.py`: profile page 抓取、候选聚合、排序、下载缓存、图片元数据读取
-- `avatar_pipeline/pipeline_runner.py`: 线性主流程编排
-- `avatar_pipeline/pg_repository.py`: 作者读取 + `authors_avatars` 查询/upsert
-- `avatar_pipeline/local_run_store.py`: 本地运行日志落盘
-- `avatar_pipeline/oss_uploader.py`: OSS 上传
+## 搜图链路（当前实现）
 
-## 环境变量
+- 使用 Qwen Responses API
+- 工具：`web_search_image`
+- 单次请求调用
+- 只消费 tool output 构建候选
+- 不做“tool output 回灌模型”
+- 不依赖模型文本输出构建候选（`response_text` 仅用于审计）
 
-数据库：
+## 后处理链路
 
-- `PGHOST`
-- `PGPORT`
-- `PGDATABASE`
-- `PGUSER`
-- `PGPASSWORD`
-- `PGSSLMODE` 可选
+1. 从 tool output 提取图片 URL 与 source URL
+2. 候选标准化与去重（按 URL 去重、内部排序分值）
+3. 取首个候选进入后续处理
+4. 下载图片并读取基础元数据
+5. MIME / 尺寸校验
+6. 计算 `sha256`
+7. 上传 OSS
+8. upsert `public.authors_avatars`
 
-OSS：
+## Source Pages 语义
 
-- `ALIYUN_OSS_ACCESS_KEY_ID`
-- `ALIYUN_OSS_ACCESS_KEY_SECRET`
-- `ALIYUN_OSS_BUCKET`
-- `ALIYUN_OSS_ENDPOINT`
-- `ALIYUN_OSS_PUBLIC_BASE_URL`
-- `ALIYUN_OSS_KEY_PREFIX` 可选，默认 `openalex`（用于 object key 前缀）
-- `ALIYUN_OSS_CACHE_CONTROL` 可选
+- `source_pages` 仅是调试/审计透传信息（由 tool output 的 source URL 推导）
+- 不参与 HTML 抓取
+- 不存在 profile page 二次抽图逻辑
 
-Qwen：
+## 本地运行输出（runs 审计）
 
-- `LLM_API_KEY`（或 `QWEN_API_KEY`）
-- `LLM_BASE_URL`（或 `QWEN_BASE_URL`）
-- `LLM_MODEL`（或 `QWEN_MODEL`）
-- `QWEN_RESPONSE_PATH`，默认 `/responses`
-- `QWEN_ENABLE_WEB_SEARCH`，默认 `true`（用于启用 `web_search` 工具调用）
-- `QWEN_MAX_CANDIDATES`，默认 `3`
-- `QWEN_MIN_CONFIDENCE`，默认 `0.55`
-- `QWEN_MAX_OUTPUT_TOKENS`，默认 `256`
-- `QWEN_TIMEOUT_SECONDS`，默认 `120`
-- `QWEN_MIN_CALL_INTERVAL_SECONDS`，默认 `0`
-
-Profile 抓取与抽图：
-
-- `PROFILE_PAGE_FETCH_TIMEOUT_SECONDS`，默认复用 `REQUEST_TIMEOUT_SECONDS`
-- `PROFILE_PAGE_MAX_COUNT`，默认 `5`
-- `PROFILE_IMAGE_MAX_PER_PAGE`，默认 `10`
-- `PROFILE_IMAGE_MIN_SCORE`，默认 `1.0`
-
-通用：
-
-- `ALLOWED_MIME`，默认 `image/jpeg,image/png,image/webp`
-- `MIN_IMAGE_EDGE_PX`，默认 `96`（现已实际生效）
-- `REQUEST_TIMEOUT_SECONDS`，默认 `20`
-- `MAX_RETRIES`，默认 `3`
-- `GLOBAL_QPS_LIMIT`，默认 `2`
-
-## 运行
-
-处理指定作者：
-
-```bash
-python3 main.py --author-id A5038153411
-```
-
-批量处理：
-
-```bash
-python3 main.py --author-ids-file author_ids.json --workers 4
-```
-
-从 `authors_analysis` 扫描：
-
-```bash
-python3 main.py --author-limit 1000 --author-offset 0 --workers 4
-```
-
-## 关键日志步骤
-
-- `load_author`
-- `qwen_search_profile_start`
-- `qwen_search_profile_retry`
-- `qwen_search_profile_done`
-- `profile_search_empty`
-- `select_first_profile_image`
-- `upload_oss_done`
-- `upsert_authors_avatars_done`
-
-## 验证方法
-
-单作者：
-
-```bash
-python3 main.py --author-id A5038153411 --workers 1 --progress-every 1 --log-level INFO
-```
-
-检查点：
-
-1. 日志出现 `qwen_web_search_profile_started/qwen_web_search_profile_finished`。
-2. `runs/<date>/<run_id>/author_runs.jsonl` 中有 `profile_pages`，且 `image_candidates` 来源为 profile page 抽取。
-3. `selected_candidate.image_url` 等于 `filtered_candidates` 第 1 条。
-4. `public.authors_avatars` 完成 upsert。
-
-## Token 成本优化点
-
-- LLM 只做 profile page 发现，不直接做图片候选筛选。
-- 图片候选发现与排序全部在本地执行，显著减少模型输出长度和多轮推理成本。
-
-## 本地运行日志
-
-每次运行会生成：
+每次运行目录：
 
 ```text
 runs/<date>/<run_id>/
@@ -168,4 +57,98 @@ runs/<date>/<run_id>/
   failures.jsonl
 ```
 
-失败样本保留 `raw_content` / `response_text` 便于排查 Qwen 输出问题。
+文件说明：
+
+- `summary.json`：运行总体状态、进度、计数、配置快照、输入摘要
+- `planned_authors.jsonl`：本次计划处理作者列表
+- `author_runs.jsonl`：每个作者完整处理结果
+- `successes.jsonl`：成功子集
+- `failures.jsonl`：失败子集
+
+`author_runs.jsonl` 中常见审计字段：
+
+- `source_pages`（调试透传）
+- `image_candidates`
+- `filtered_candidates`
+- `selected_candidate`
+- `raw_content`
+- `response_text`（audit-only）
+- `usage_total_tokens`
+
+## 环境变量（仅当前有效项）
+
+### Postgres
+
+- `PGHOST`
+- `PGPORT`（默认 `5432`）
+- `PGDATABASE`
+- `PGUSER`
+- `PGPASSWORD`
+- `PGSSLMODE`（可选）
+
+### OSS
+
+- `ALIYUN_OSS_ACCESS_KEY_ID`
+- `ALIYUN_OSS_ACCESS_KEY_SECRET`
+- `ALIYUN_OSS_BUCKET`
+- `ALIYUN_OSS_ENDPOINT`
+- `ALIYUN_OSS_PUBLIC_BASE_URL`
+- `ALIYUN_OSS_KEY_PREFIX`（默认 `openalex`）
+- `ALIYUN_OSS_CACHE_CONTROL`（可选）
+
+### HTTP / Retry / Rate Limit
+
+- `REQUEST_TIMEOUT_SECONDS`（默认 `20`）
+- `MAX_RETRIES`（默认 `3`）
+- `GLOBAL_QPS_LIMIT`（默认 `2`）
+- `RETRY_BASE_SECONDS`（默认 `1.5`）
+- `RETRY_MAX_SECONDS`（默认 `60`）
+- `RETRY_JITTER_RATIO`（默认 `0.25`）
+- `RETRY_429_MIN_DELAY_SECONDS`（默认 `8`）
+
+### Qwen
+
+- `LLM_API_KEY` 或 `QWEN_API_KEY`
+- `LLM_BASE_URL` 或 `QWEN_BASE_URL`
+- `LLM_MODEL` 或 `QWEN_MODEL`
+- `QWEN_ENABLE_WEB_SEARCH`（默认 `true`）
+- `QWEN_MAX_CANDIDATES`（默认 `3`）
+- `QWEN_MIN_CONFIDENCE`（默认 `0.55`）
+- `QWEN_MAX_OUTPUT_TOKENS`（默认 `256`）
+- `QWEN_TIMEOUT_SECONDS`（默认 `120`）
+- `QWEN_MIN_CALL_INTERVAL_SECONDS`（默认 `0`）
+- `QWEN_SDK_MAX_RETRIES`（默认 `0`）
+
+### 图片校验
+
+- `ALLOWED_MIME`（默认 `image/jpeg,image/png,image/webp`）
+- `MIN_IMAGE_EDGE_PX`（默认 `96`）
+
+## CLI 运行
+
+处理指定作者：
+
+```bash
+python3 main.py --author-id A5038153411
+```
+
+从文件批量处理：
+
+```bash
+python3 main.py --author-ids-file author_ids.json --workers 4
+```
+
+扫描数据库作者输入集合：
+
+```bash
+python3 main.py --author-limit 1000 --author-offset 0 --workers 4
+```
+
+## 设计原则与限制
+
+- ORCID 是当前身份锚点；无 ORCID 时 Qwen 搜图阶段直接失败
+- 默认只取首个候选进入图片验证与上传
+- `source_pages` 仅用于审计透传，不参与抓取
+- 项目不包含 profile page 二次抽图流程
+- 主链候选仅来自 `web_search_image` tool output
+
