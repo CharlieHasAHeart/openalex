@@ -86,36 +86,11 @@ class QwenToolsClient:
     def model(self) -> str:
         return self._model
 
-    def _build_response_format(self) -> dict[str, Any]:
-        return {"type": "json_object"}
-
     def _truncate_text(self, value: Any, max_chars: int) -> str:
         text = str(value or "").strip()
         if len(text) <= max_chars:
             return text
         return f"{text[: max(0, max_chars - 1)]}..."
-
-    def _compact_sequence(self, value: Any, max_items: int, max_item_chars: int) -> list[str]:
-        if not isinstance(value, list):
-            return []
-        compact: list[str] = []
-        for item in value:
-            if len(compact) >= max_items:
-                break
-            if isinstance(item, dict):
-                name = (
-                    item.get("display_name")
-                    or item.get("institution")
-                    or item.get("name")
-                    or item.get("raw_affiliation_string")
-                    or ""
-                )
-                text = self._truncate_text(name, max_item_chars)
-            else:
-                text = self._truncate_text(item, max_item_chars)
-            if text:
-                compact.append(text)
-        return compact
 
     def _author_ctx(self, author: AuthorRecord) -> dict[str, Any]:
         return {
@@ -126,14 +101,15 @@ class QwenToolsClient:
         }
 
     def _build_prompt(self, author: AuthorRecord) -> str:
+        author_ctx = json.dumps(self._author_ctx(author), ensure_ascii=False)
         return (
-            "Use the web_search_image tool to find profile portrait photos for this exact researcher.\\n"
-            "Anchor identity with display_name + orcid + institution_name before accepting any image.\\n"
-            "Prioritize official university/department/lab/personal homepage sources.\\n"
-            "Prefer a single-person headshot or upper-body portrait.\\n"
-            "Avoid logos, banners, icons, illustrations, group photos, and same-name mismatches.\\n"
-            "Use web_search_image and return your normal tool-assisted answer format.\\n"
-            f"author={json.dumps(self._author_ctx(author), ensure_ascii=False)}"
+            "You are tasked with finding a single portrait photo for the researcher below.\\n"
+            "Always call the `web_search_image` tool; do not respond without using it.\\n"
+            "Confirm identity with the provided display_name, ORCID, and institution name before accepting any image.\\n"
+            "Prefer official academic or professional sources (university domains, departmental pages, personal faculty sites).\\n"
+            "Accept only one-person headshot or upper-body photos. Reject logos, illustrations, collages, group photos, or same-name mismatches.\\n"
+            "Return your findings exclusively through tool calls.\\n"
+            f"author_context={author_ctx}"
         )
 
     def _extract_response_text(self, payload: dict[str, Any]) -> str | None:
@@ -284,7 +260,6 @@ class QwenToolsClient:
             max_output_tokens=payload.get("max_output_tokens"),
             extra_body={
                 "temperature": payload.get("temperature", 0),
-                "response_format": payload.get("response_format"),
                 "enable_thinking": False,
             },
         )
@@ -294,7 +269,7 @@ class QwenToolsClient:
             data = response.model_dump(warnings=False)
         else:
             data = {}
-        return data if isinstance(data, dict) else {}, "json_object"
+        return data if isinstance(data, dict) else {}, "tool_output_only"
 
     def _exception_response_text(self, exc: Exception) -> str | None:
         response = getattr(exc, "response", None)
@@ -333,7 +308,6 @@ class QwenToolsClient:
             "input": [{"role": "user", "content": [{"type": "input_text", "text": self._build_prompt(author)}]}],
             "temperature": 0,
             "max_output_tokens": self._max_output_tokens,
-            "response_format": self._build_response_format(),
             "tools": ([{"type": "web_search_image"}] if self._enable_web_search else []),
         }
         logger.info("qwen_web_search_image_started author_id=%s model=%s", author.author_id, self._model)
