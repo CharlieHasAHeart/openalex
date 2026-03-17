@@ -22,8 +22,9 @@ class SearchCandidate:
     size_bytes: int | None = None
     is_valid_image: bool | None = None
     invalid_reason: str | None = None
-    linked_profile_url: str | None = None
-    linked_profile_domain: str | None = None
+    linked_source_page_url: str | None = None
+    linked_source_page_domain: str | None = None
+    # Internal ranking score derived from tool confidence for sorting/dedupe only.
     score: float | None = None
     source_type: str | None = None
     alt_text: str | None = None
@@ -32,7 +33,7 @@ class SearchCandidate:
 @dataclass(slots=True)
 class SearchOutcome:
     # Debug pass-through pages derived from tool-output source URLs; no HTML fetch is performed.
-    profile_pages: list[dict[str, Any]]
+    source_pages: list[dict[str, Any]]
     image_candidates: list[dict[str, Any]]
     filtered_candidates: list[dict[str, Any]]
     candidates: list[SearchCandidate]
@@ -82,7 +83,6 @@ class WebSearchClient:
         self._debug_page_max_count = self._max_candidates
         self._image_cache: dict[str, CachedImage] = {}
         self._qwen_tools = QwenToolsClient(
-            http=http,
             api_key=qwen_api_key,
             base_url=qwen_base_url,
             model=qwen_model,
@@ -93,8 +93,8 @@ class WebSearchClient:
             max_candidates=self._max_candidates,
             max_output_tokens=qwen_max_output_tokens,
             sdk_max_retries=qwen_sdk_max_retries,
-            response_path=qwen_response_path,
         )
+        _ = qwen_response_path
         self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen_web_search_image", "reason_tags": []}
 
     def provider_mode(self) -> str:
@@ -115,7 +115,7 @@ class WebSearchClient:
         cleaned: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in pages:
-            source_page_url = str(row.get("profile_url") or row.get("url") or "").strip()
+            source_page_url = str(row.get("url") or "").strip()
             if not self._is_http_url(source_page_url):
                 continue
             dedupe_key = source_page_url.rstrip("/")
@@ -125,7 +125,7 @@ class WebSearchClient:
             cleaned.append(
                 {
                     "site": str(row.get("site") or self._normalize_domain(source_page_url)).strip(),
-                    "profile_url": source_page_url,
+                    "url": source_page_url,
                     "reason": str(row.get("reason") or "source_page").strip(),
                     "confidence": row.get("confidence"),
                 }
@@ -151,14 +151,14 @@ class WebSearchClient:
         image_url = str(row.get("image_url") or "").strip()
         return SearchCandidate(
             image_url=image_url,
-            source_url=str(row.get("source_url") or row.get("linked_profile_url") or image_url).strip(),
+            source_url=str(row.get("source_url") or row.get("linked_source_page_url") or image_url).strip(),
             title=str(row.get("title") or "").strip(),
             snippet=str(row.get("snippet") or "").strip(),
             mime=_guess_mime_from_url(image_url),
             width=row.get("declared_width") if isinstance(row.get("declared_width"), int) else None,
             height=row.get("declared_height") if isinstance(row.get("declared_height"), int) else None,
-            linked_profile_url=str(row.get("linked_profile_url") or "").strip() or None,
-            linked_profile_domain=str(row.get("linked_profile_domain") or "").strip() or None,
+            linked_source_page_url=str(row.get("linked_source_page_url") or "").strip() or None,
+            linked_source_page_domain=str(row.get("linked_source_page_domain") or "").strip() or None,
             score=float(row.get("score")) if isinstance(row.get("score"), (int, float)) else None,
             source_type=str(row.get("source_type") or "").strip() or None,
             alt_text=str(row.get("alt_text") or "").strip() or None,
@@ -169,7 +169,7 @@ class WebSearchClient:
         if not self._is_http_url(image_url):
             return None
         source_url = str(row.get("source_url") or "").strip()
-        linked_profile_url = source_url if self._is_http_url(source_url) else None
+        linked_source_page_url = source_url if self._is_http_url(source_url) else None
         confidence_raw = row.get("confidence")
         confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else 0.0
         return {
@@ -177,8 +177,8 @@ class WebSearchClient:
             "source_url": source_url or image_url,
             "title": str(row.get("title") or "").strip(),
             "snippet": str(row.get("snippet") or "").strip(),
-            "linked_profile_url": linked_profile_url,
-            "linked_profile_domain": self._normalize_domain(linked_profile_url) if linked_profile_url else self._normalize_domain(image_url),
+            "linked_source_page_url": linked_source_page_url,
+            "linked_source_page_domain": self._normalize_domain(linked_source_page_url) if linked_source_page_url else self._normalize_domain(image_url),
             "source_type": str(row.get("source_type") or "qwen_web_search_image").strip(),
             "alt_text": str(row.get("alt_text") or "").strip(),
             "score": round(1.5 + confidence * 2.0, 3),
@@ -189,75 +189,34 @@ class WebSearchClient:
 
     def search_author(self, author: AuthorRecord) -> SearchOutcome:
         result = self._qwen_tools.search_author(author)
-        cleaned_profile_pages = self._clean_debug_source_pages(result.profile_pages)
+        cleaned_source_pages = self._clean_debug_source_pages(result.source_pages)
         source_rows = result.filtered_candidates if result.filtered_candidates else result.image_candidates
         qwen_image_rows = [row for row in (self._from_qwen_image_row(item) for item in source_rows) if row is not None]
         deduped_candidates = self._dedupe_image_candidates(qwen_image_rows)
         filtered_rows = deduped_candidates[: self._max_candidates]
         candidates = [self._to_search_candidate(row) for row in filtered_rows]
 
-        if result.failure_reason and not candidates:
-            failure_reason = result.failure_reason
-            reason_tags = [failure_reason] if failure_reason else []
-            self._last_search_diagnostics = {
-                "provider_mode": "qwen_web_search_image",
-                "reason_tags": reason_tags,
-                "profile_pages_count": len(cleaned_profile_pages),
-                "image_candidates_count": len(deduped_candidates),
-                "filtered_candidates_count": len(filtered_rows),
-                "kept_count": len(candidates),
-            }
-            return SearchOutcome(
-                profile_pages=cleaned_profile_pages,
-                image_candidates=deduped_candidates,
-                filtered_candidates=filtered_rows,
-                candidates=candidates,
-                failure_reason=failure_reason,
-                reason_tags=reason_tags,
-                raw_content=result.raw_content,
-                response_text=result.response_text,
-                abandon_reason_log=result.abandon_reason_log,
-                usage_total_tokens=result.usage_total_tokens,
-            )
-
-        if not candidates:
+        if candidates:
+            failure_reason = None
+            reason_tags: list[str] = []
+        else:
             failure_reason = result.failure_reason or "qwen_web_search_image_no_candidates"
             reason_tags = [failure_reason]
-            self._last_search_diagnostics = {
-                "provider_mode": "qwen_web_search_image",
-                "reason_tags": reason_tags,
-                "profile_pages_count": len(cleaned_profile_pages),
-                "image_candidates_count": len(deduped_candidates),
-                "filtered_candidates_count": len(filtered_rows),
-                "kept_count": len(candidates),
-            }
-            return SearchOutcome(
-                profile_pages=cleaned_profile_pages,
-                image_candidates=deduped_candidates,
-                filtered_candidates=filtered_rows,
-                candidates=candidates,
-                failure_reason=failure_reason,
-                reason_tags=reason_tags,
-                raw_content=result.raw_content,
-                response_text=result.response_text,
-                abandon_reason_log=result.abandon_reason_log,
-                usage_total_tokens=result.usage_total_tokens,
-            )
-        reason_tags: list[str] = []
+
         self._last_search_diagnostics = {
             "provider_mode": "qwen_web_search_image",
             "reason_tags": reason_tags,
-            "profile_pages_count": len(cleaned_profile_pages),
+            "source_pages_count": len(cleaned_source_pages),
             "image_candidates_count": len(deduped_candidates),
             "filtered_candidates_count": len(filtered_rows),
             "kept_count": len(candidates),
         }
         return SearchOutcome(
-            profile_pages=cleaned_profile_pages,
+            source_pages=cleaned_source_pages,
             image_candidates=deduped_candidates,
             filtered_candidates=filtered_rows,
             candidates=candidates,
-            failure_reason=None,
+            failure_reason=failure_reason,
             reason_tags=reason_tags,
             raw_content=result.raw_content,
             response_text=result.response_text,
