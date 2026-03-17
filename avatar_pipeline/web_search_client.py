@@ -214,24 +214,28 @@ class WebSearchClient:
     def search_author(self, author: AuthorRecord) -> SearchOutcome:
         result = self._qwen_tools.search_author(author)
         cleaned_profile_pages = self._clean_profile_pages(result.profile_pages)
-        qwen_image_rows = [row for row in (self._from_qwen_image_row(item) for item in result.image_candidates) if row is not None]
+        source_rows = result.filtered_candidates if result.filtered_candidates else result.image_candidates
+        qwen_image_rows = [row for row in (self._from_qwen_image_row(item) for item in source_rows) if row is not None]
+        deduped_candidates = self._dedupe_image_candidates(qwen_image_rows)
+        filtered_rows = deduped_candidates[: self._max_candidates]
+        candidates = [self._to_search_candidate(row) for row in filtered_rows]
 
-        if result.failure_reason and not cleaned_profile_pages and not qwen_image_rows:
+        if result.failure_reason and not candidates:
             failure_reason = result.failure_reason
             reason_tags = [failure_reason] if failure_reason else []
             self._last_search_diagnostics = {
                 "provider_mode": "qwen",
                 "reason_tags": reason_tags,
                 "profile_pages_count": len(cleaned_profile_pages),
-                "image_candidates_count": len(qwen_image_rows),
-                "filtered_candidates_count": len(qwen_image_rows[: self._max_candidates]),
-                "kept_count": len(qwen_image_rows[: self._max_candidates]),
+                "image_candidates_count": len(deduped_candidates),
+                "filtered_candidates_count": len(filtered_rows),
+                "kept_count": len(candidates),
             }
             return SearchOutcome(
                 profile_pages=cleaned_profile_pages,
-                image_candidates=qwen_image_rows,
-                filtered_candidates=qwen_image_rows[: self._max_candidates],
-                candidates=[self._to_search_candidate(row) for row in qwen_image_rows[: self._max_candidates]],
+                image_candidates=deduped_candidates,
+                filtered_candidates=filtered_rows,
+                candidates=candidates,
                 failure_reason=failure_reason,
                 reason_tags=reason_tags,
                 raw_content=result.raw_content,
@@ -240,22 +244,22 @@ class WebSearchClient:
                 usage_total_tokens=result.usage_total_tokens,
             )
 
-        if not cleaned_profile_pages and not qwen_image_rows:
-            failure_reason = result.failure_reason or "qwen_web_search_no_profile_pages"
+        if not candidates:
+            failure_reason = result.failure_reason or "qwen_web_search_image_no_candidates"
             reason_tags = [failure_reason]
             self._last_search_diagnostics = {
                 "provider_mode": "qwen",
                 "reason_tags": reason_tags,
-                "profile_pages_count": 0,
-                "image_candidates_count": 0,
-                "filtered_candidates_count": 0,
-                "kept_count": 0,
+                "profile_pages_count": len(cleaned_profile_pages),
+                "image_candidates_count": len(deduped_candidates),
+                "filtered_candidates_count": len(filtered_rows),
+                "kept_count": len(candidates),
             }
             return SearchOutcome(
-                profile_pages=[],
-                image_candidates=[],
-                filtered_candidates=[],
-                candidates=[],
+                profile_pages=cleaned_profile_pages,
+                image_candidates=deduped_candidates,
+                filtered_candidates=filtered_rows,
+                candidates=candidates,
                 failure_reason=failure_reason,
                 reason_tags=reason_tags,
                 raw_content=result.raw_content,
@@ -263,30 +267,7 @@ class WebSearchClient:
                 abandon_reason_log=result.abandon_reason_log,
                 usage_total_tokens=result.usage_total_tokens,
             )
-
-        extracted_candidates: list[dict[str, Any]] = []
-        for page in cleaned_profile_pages:
-            profile_url = str(page.get("profile_url") or "").strip()
-            if not profile_url:
-                continue
-            html_text = self._fetch_profile_page_html(profile_url)
-            if not html_text:
-                continue
-            extracted_candidates.extend(self._profile_extractor.extract(author, profile_url, html_text))
-        extracted_candidates.extend(qwen_image_rows)
-
-        deduped_candidates = self._dedupe_image_candidates(extracted_candidates)
-        filtered_rows = [
-            row for row in deduped_candidates if float(row.get("score") or 0.0) >= self._profile_image_min_score
-        ]
-        filtered_rows = filtered_rows[: self._max_candidates]
-        candidates = [self._to_search_candidate(row) for row in filtered_rows]
-
-        failure_reason = result.failure_reason
-        if not candidates and failure_reason is None:
-            failure_reason = "profile_pages_no_image_candidates"
-        if candidates:
-            failure_reason = None
+        failure_reason = None
         reason_tags = [failure_reason] if failure_reason else []
         self._last_search_diagnostics = {
             "provider_mode": "qwen",
