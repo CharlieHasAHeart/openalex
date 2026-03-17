@@ -32,11 +32,13 @@ warnings.filterwarnings(
 
 @dataclass(slots=True)
 class QwenSearchResult:
+    # Debug pass-through pages inferred from tool output source URLs only.
     profile_pages: list[dict[str, Any]]
     image_candidates: list[dict[str, Any]]
     filtered_candidates: list[dict[str, Any]]
     failure_reason: str | None = None
     raw_content: str | None = None
+    # Debug/audit text extracted from model response payload; not used for candidate selection.
     response_text: str | None = None
     response_format_mode: str | None = None
     abandon_reason_log: str | None = None
@@ -113,6 +115,7 @@ class QwenToolsClient:
         )
 
     def _extract_response_text(self, payload: dict[str, Any]) -> str | None:
+        # Keep text for local audit. Candidate construction only consumes tool output.
         output_text = payload.get("output_text")
         if isinstance(output_text, str) and output_text.strip():
             return output_text
@@ -145,14 +148,14 @@ class QwenToolsClient:
         host = urlparse(url).netloc.lower()
         return host[4:] if host.startswith("www.") else host
 
-    def _sanitize_profile_pages(self, pages: list[dict[str, Any]], max_count: int) -> list[dict[str, Any]]:
+    def _sanitize_debug_source_pages(self, pages: list[dict[str, Any]], max_count: int) -> list[dict[str, Any]]:
         deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in pages:
-            profile_url = str(row.get("profile_url") or "").strip()
-            if not self._is_http_url(profile_url):
+            source_page_url = str(row.get("profile_url") or "").strip()
+            if not self._is_http_url(source_page_url):
                 continue
-            key = profile_url.rstrip("/")
+            key = source_page_url.rstrip("/")
             if key in seen:
                 continue
             seen.add(key)
@@ -160,9 +163,9 @@ class QwenToolsClient:
             confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else self._min_confidence
             deduped.append(
                 {
-                    "site": str(row.get("site") or self._site_from_url(profile_url)).strip(),
-                    "profile_url": profile_url,
-                    "reason": str(row.get("reason") or "profile_page").strip(),
+                    "site": str(row.get("site") or self._site_from_url(source_page_url)).strip(),
+                    "profile_url": source_page_url,
+                    "reason": str(row.get("reason") or "source_page").strip(),
                     "confidence": max(0.0, min(1.0, confidence)),
                 }
             )
@@ -300,7 +303,7 @@ class QwenToolsClient:
                 [],
                 [],
                 failure_reason="qwen_profile_search_no_orcid",
-                abandon_reason_log="orcid missing for profile search",
+                abandon_reason_log="orcid missing for web_search_image",
             )
 
         payload = {
@@ -330,7 +333,7 @@ class QwenToolsClient:
         usage_total_tokens = self._extract_usage_total_tokens(data)
         rows_from_tool = self._collect_urls_from_tool_calls(data)
         deduped_images = self._sanitize_image_candidates(rows_from_tool, max_count=self._max_candidates)
-        deduped_pages = self._sanitize_profile_pages(
+        debug_source_pages = self._sanitize_debug_source_pages(
             [
                 {
                     "site": self._site_from_url(source_url),
@@ -365,7 +368,7 @@ class QwenToolsClient:
             len(deduped_images),
         )
         return QwenSearchResult(
-            profile_pages=deduped_pages,
+            profile_pages=debug_source_pages,
             image_candidates=deduped_images,
             filtered_candidates=deduped_images,
             failure_reason=None,

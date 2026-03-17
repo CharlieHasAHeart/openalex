@@ -43,10 +43,12 @@ class PipelineResult:
     oss_url: str | None = None
     selected_candidate: dict[str, Any] | None = None
     ranked_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # Debug pass-through pages derived from tool output source URLs.
     profile_pages: list[dict[str, Any]] = field(default_factory=list)
     image_candidates: list[dict[str, Any]] = field(default_factory=list)
     filtered_candidates: list[dict[str, Any]] = field(default_factory=list)
     raw_content: str | None = None
+    # Debug/audit text only; candidate selection is tool-output driven.
     response_text: str | None = None
     abandon_reason_log: str | None = None
     usage_total_tokens: int | None = None

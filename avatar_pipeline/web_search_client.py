@@ -31,6 +31,7 @@ class SearchCandidate:
 
 @dataclass(slots=True)
 class SearchOutcome:
+    # Debug pass-through pages derived from tool-output source URLs; no HTML fetch is performed.
     profile_pages: list[dict[str, Any]]
     image_candidates: list[dict[str, Any]]
     filtered_candidates: list[dict[str, Any]]
@@ -78,7 +79,7 @@ class WebSearchClient:
     ) -> None:
         self._http = http
         self._max_candidates = max(1, max_candidates)
-        self._profile_page_max_count = self._max_candidates
+        self._debug_page_max_count = self._max_candidates
         self._image_cache: dict[str, CachedImage] = {}
         self._qwen_tools = QwenToolsClient(
             http=http,
@@ -110,26 +111,26 @@ class WebSearchClient:
         host = urlparse(url).netloc.lower().strip()
         return host[4:] if host.startswith("www.") else host
 
-    def _clean_profile_pages(self, pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _clean_debug_source_pages(self, pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         cleaned: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in pages:
-            profile_url = str(row.get("profile_url") or row.get("url") or "").strip()
-            if not self._is_http_url(profile_url):
+            source_page_url = str(row.get("profile_url") or row.get("url") or "").strip()
+            if not self._is_http_url(source_page_url):
                 continue
-            dedupe_key = profile_url.rstrip("/")
+            dedupe_key = source_page_url.rstrip("/")
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
             cleaned.append(
                 {
-                    "site": str(row.get("site") or self._normalize_domain(profile_url)).strip(),
-                    "profile_url": profile_url,
-                    "reason": str(row.get("reason") or "profile_page").strip(),
+                    "site": str(row.get("site") or self._normalize_domain(source_page_url)).strip(),
+                    "profile_url": source_page_url,
+                    "reason": str(row.get("reason") or "source_page").strip(),
                     "confidence": row.get("confidence"),
                 }
             )
-            if len(cleaned) >= self._profile_page_max_count:
+            if len(cleaned) >= self._debug_page_max_count:
                 break
         return cleaned
 
@@ -188,7 +189,7 @@ class WebSearchClient:
 
     def search_author(self, author: AuthorRecord) -> SearchOutcome:
         result = self._qwen_tools.search_author(author)
-        cleaned_profile_pages = self._clean_profile_pages(result.profile_pages)
+        cleaned_profile_pages = self._clean_debug_source_pages(result.profile_pages)
         source_rows = result.filtered_candidates if result.filtered_candidates else result.image_candidates
         qwen_image_rows = [row for row in (self._from_qwen_image_row(item) for item in source_rows) if row is not None]
         deduped_candidates = self._dedupe_image_candidates(qwen_image_rows)
@@ -242,8 +243,7 @@ class WebSearchClient:
                 abandon_reason_log=result.abandon_reason_log,
                 usage_total_tokens=result.usage_total_tokens,
             )
-        failure_reason = None
-        reason_tags = [failure_reason] if failure_reason else []
+        reason_tags: list[str] = []
         self._last_search_diagnostics = {
             "provider_mode": "qwen_web_search_image",
             "reason_tags": reason_tags,
@@ -257,7 +257,7 @@ class WebSearchClient:
             image_candidates=deduped_candidates,
             filtered_candidates=filtered_rows,
             candidates=candidates,
-            failure_reason=failure_reason,
+            failure_reason=None,
             reason_tags=reason_tags,
             raw_content=result.raw_content,
             response_text=result.response_text,
