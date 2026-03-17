@@ -124,14 +124,11 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             return None
         last_known_institutions = row.get("last_known_institutions")
         affiliations = row.get("affiliations")
-        institution_names, country_codes = self._extract_institution_names_and_countries(last_known_institutions)
-        affiliation_names, affiliation_countries = self._extract_institution_names_and_countries(affiliations)
+        institution_names, _ = self._extract_institution_names_and_countries(last_known_institutions)
+        affiliation_names, _ = self._extract_institution_names_and_countries(affiliations)
         for name in affiliation_names:
             if name not in institution_names:
                 institution_names.append(name)
-        for country in affiliation_countries:
-            if country not in country_codes:
-                country_codes.append(country)
         institution_name = institution_names[0] if institution_names else None
 
         return AuthorRecord(
@@ -139,11 +136,6 @@ class PgRepository(AbstractContextManager["PgRepository"]):
             display_name=str(row.get("display_name") or "").strip(),
             orcid_url=str(row.get("orcid")).strip() if row.get("orcid") else None,
             institution_name=institution_name,
-            institution_names=institution_names,
-            institution_country_codes=country_codes,
-            affiliations=affiliations,
-            last_known_institutions=last_known_institutions,
-            profile=row,
         )
 
     def list_author_records_from_authors_analysis(self, limit: int | None = None, offset: int = 0) -> list[AuthorRecord]:

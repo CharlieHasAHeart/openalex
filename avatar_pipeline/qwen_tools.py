@@ -125,7 +125,6 @@ class QwenToolsClient:
             "display_name": self._truncate_text(author.display_name, 96),
             "orcid": author.orcid,
             "institution_name": self._truncate_text(author.institution_name, 96),
-            "last_known_institutions": self._compact_sequence(author.last_known_institutions, max_items=3, max_item_chars=96),
         }
 
     def _build_prompt(self, author: AuthorRecord) -> str:

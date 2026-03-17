@@ -10,11 +10,6 @@ class AuthorRecord:
     display_name: str
     orcid_url: str | None
     institution_name: str | None = None
-    institution_names: list[str] | None = None
-    institution_country_codes: list[str] | None = None
-    affiliations: Any = None
-    last_known_institutions: Any = None
-    profile: dict[str, Any] | None = None
 
     @property
     def orcid(self) -> str | None:
