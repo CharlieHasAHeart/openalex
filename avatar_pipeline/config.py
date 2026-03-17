@@ -91,10 +91,6 @@ class PipelineConfig:
     qwen_timeout_seconds: int
     qwen_min_call_interval_seconds: float
     qwen_sdk_max_retries: int
-    profile_page_fetch_timeout_seconds: int
-    profile_page_max_count: int
-    profile_image_max_per_page: int
-    profile_image_min_score: float
 
     @classmethod
     def from_env(cls) -> "PipelineConfig":
@@ -136,10 +132,4 @@ class PipelineConfig:
             qwen_timeout_seconds=int(_get_env("QWEN_TIMEOUT_SECONDS", "120")),
             qwen_min_call_interval_seconds=float(_get_env("QWEN_MIN_CALL_INTERVAL_SECONDS", "0")),
             qwen_sdk_max_retries=int(_get_env("QWEN_SDK_MAX_RETRIES", "0")),
-            profile_page_fetch_timeout_seconds=int(
-                _get_env("PROFILE_PAGE_FETCH_TIMEOUT_SECONDS", _get_env("REQUEST_TIMEOUT_SECONDS", "20"))
-            ),
-            profile_page_max_count=int(_get_env("PROFILE_PAGE_MAX_COUNT", "5")),
-            profile_image_max_per_page=int(_get_env("PROFILE_IMAGE_MAX_PER_PAGE", "10")),
-            profile_image_min_score=float(_get_env("PROFILE_IMAGE_MIN_SCORE", "1.0")),
         )

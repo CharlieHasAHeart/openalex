@@ -75,14 +75,10 @@ class WebSearchClient:
         qwen_min_confidence: float,
         qwen_max_output_tokens: int,
         qwen_sdk_max_retries: int,
-        profile_page_fetch_timeout_seconds: int,
-        profile_page_max_count: int,
-        profile_image_max_per_page: int,
-        profile_image_min_score: float,
     ) -> None:
         self._http = http
         self._max_candidates = max(1, max_candidates)
-        self._profile_page_max_count = max(1, int(profile_page_max_count))
+        self._profile_page_max_count = self._max_candidates
         self._image_cache: dict[str, CachedImage] = {}
         self._qwen_tools = QwenToolsClient(
             http=http,
@@ -93,7 +89,7 @@ class WebSearchClient:
             min_call_interval_seconds=qwen_min_call_interval_seconds,
             enable_web_search=qwen_enable_web_search,
             min_confidence=qwen_min_confidence,
-            max_candidates=self._profile_page_max_count,
+            max_candidates=self._max_candidates,
             max_output_tokens=qwen_max_output_tokens,
             sdk_max_retries=qwen_sdk_max_retries,
             response_path=qwen_response_path,
