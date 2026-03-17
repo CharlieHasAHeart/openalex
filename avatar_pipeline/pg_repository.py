@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import time
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import psycopg
 from psycopg.rows import dict_row
 
 from avatar_pipeline.models import AuthorRecord, PipelineResult
+
+T = TypeVar("T")
 
 
 class PgRepository(AbstractContextManager["PgRepository"]):
@@ -26,7 +28,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         )
         self._conn = self._connect()
 
-    def _connect(self):
+    def _connect(self) -> Any:
         conn = psycopg.connect(self._conninfo, row_factory=dict_row)
         conn.autocommit = True
         return conn
@@ -35,11 +37,11 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         self.close()
         self._conn = self._connect()
 
-    def _run_with_reconnect(self, func, max_attempts: int = 3):
+    def _run_with_reconnect(self, operation: Callable[[], T], max_attempts: int = 3) -> T:
         last_exc: Exception | None = None
         for attempt in range(1, max_attempts + 1):
             try:
-                return func()
+                return operation()
             except psycopg.OperationalError as exc:
                 last_exc = exc
                 if attempt >= max_attempts:
@@ -60,25 +62,33 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         self.close()
 
     def _row_to_author_record(self, row: dict[str, Any]) -> AuthorRecord | None:
-        raw_id = row.get("author_id")
-        if raw_id is None:
+        raw_author_id = row.get("author_id")
+        if raw_author_id is None:
             return None
-        display_name = str(row.get("display_name") or "").strip()
-        orcid_raw = row.get("orcid")
-        orcid_url = str(orcid_raw).strip() if orcid_raw else None
-        if orcid_url == "":
-            orcid_url = None
-        institution_raw = row.get("institution_name")
-        institution_name = str(institution_raw).strip() if institution_raw else None
-        if institution_name == "":
-            institution_name = None
+        author_id = str(raw_author_id).strip()
+        if not author_id:
+            return None
 
         return AuthorRecord(
-            author_id=str(raw_id).strip(),
-            display_name=display_name,
-            orcid_url=orcid_url,
-            institution_name=institution_name,
+            author_id=author_id,
+            display_name=str(row.get("display_name") or "").strip(),
+            orcid_url=str(row.get("orcid") or "").strip() or None,
+            institution_name=str(row.get("institution_name") or "").strip() or None,
         )
+
+    def _fetch_author_records(self, sql: str, params: tuple[Any, ...]) -> list[AuthorRecord]:
+        def _op() -> list[dict[str, Any]]:
+            with self._conn.cursor() as cur:
+                cur.execute(sql, params)
+                return cur.fetchall() or []
+
+        rows = self._run_with_reconnect(_op)
+        records: list[AuthorRecord] = []
+        for row in rows:
+            record = self._row_to_author_record(row)
+            if record is not None:
+                records.append(record)
+        return records
 
     def list_author_records(self, limit: int | None = None, offset: int = 0) -> list[AuthorRecord]:
         sql = """
@@ -99,19 +109,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         if offset > 0:
             sql += " OFFSET %s"
             params.append(offset)
-
-        def _op():
-            with self._conn.cursor() as cur:
-                cur.execute(sql, tuple(params))
-                return cur.fetchall() or []
-
-        rows = self._run_with_reconnect(_op)
-        records: list[AuthorRecord] = []
-        for row in rows:
-            record = self._row_to_author_record(row)
-            if record is not None:
-                records.append(record)
-        return records
+        return self._fetch_author_records(sql, tuple(params))
 
     def list_author_records_by_ids(self, author_ids: list[str]) -> list[AuthorRecord]:
         normalized_ids = [item.strip() for item in author_ids if item and item.strip()]
@@ -129,25 +127,7 @@ class PgRepository(AbstractContextManager["PgRepository"]):
         WHERE aa.id::text = ANY(%s)
         ORDER BY aa.id
         """
-
-        def _op():
-            with self._conn.cursor() as cur:
-                cur.execute(sql, (normalized_ids,))
-                return cur.fetchall() or []
-
-        rows = self._run_with_reconnect(_op)
-        records: list[AuthorRecord] = []
-        for row in rows:
-            record = self._row_to_author_record(row)
-            if record is not None:
-                records.append(record)
-        return records
-
-    def list_author_records_from_authors_analysis(self, limit: int | None = None, offset: int = 0) -> list[AuthorRecord]:
-        return self.list_author_records(limit=limit, offset=offset)
-
-    def list_author_records_from_authors_analysis_by_ids(self, author_ids: list[str]) -> list[AuthorRecord]:
-        return self.list_author_records_by_ids(author_ids=author_ids)
+        return self._fetch_author_records(sql, (normalized_ids,))
 
     def get_author_avatar_record(self, author_id: str) -> dict[str, Any] | None:
         sql = """
