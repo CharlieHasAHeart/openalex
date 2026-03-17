@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
-from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
 
 logger = logging.getLogger(__name__)
@@ -32,23 +31,25 @@ warnings.filterwarnings(
 
 @dataclass(slots=True)
 class QwenSearchResult:
-    # Debug pass-through pages inferred from tool output source URLs only.
-    profile_pages: list[dict[str, Any]]
+    # Debug pass-through source pages inferred from tool output source URLs only.
+    source_pages: list[dict[str, Any]]
     image_candidates: list[dict[str, Any]]
     filtered_candidates: list[dict[str, Any]]
     failure_reason: str | None = None
     raw_content: str | None = None
     # Debug/audit text extracted from model response payload; not used for candidate selection.
     response_text: str | None = None
-    response_format_mode: str | None = None
     abandon_reason_log: str | None = None
     usage_total_tokens: int | None = None
+
+    @property
+    def profile_pages(self) -> list[dict[str, Any]]:
+        return self.source_pages
 
 
 class QwenToolsClient:
     def __init__(
         self,
-        http: HttpClient,
         api_key: str | None,
         base_url: str,
         model: str,
@@ -59,9 +60,7 @@ class QwenToolsClient:
         max_candidates: int,
         max_output_tokens: int,
         sdk_max_retries: int,
-        response_path: str = "/responses",
     ) -> None:
-        self._http = http
         self._api_key = (api_key or "").strip()
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -72,7 +71,6 @@ class QwenToolsClient:
         self._max_candidates = max(1, int(max_candidates))
         self._max_output_tokens = max(64, int(max_output_tokens))
         self._sdk_max_retries = max(0, int(sdk_max_retries))
-        self._response_path = response_path if response_path.startswith("/") else f"/{response_path}"
         self._client = (
             OpenAI(
                 api_key=self._api_key,
@@ -152,7 +150,7 @@ class QwenToolsClient:
         deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in pages:
-            source_page_url = str(row.get("profile_url") or "").strip()
+            source_page_url = str(row.get("url") or "").strip()
             if not self._is_http_url(source_page_url):
                 continue
             key = source_page_url.rstrip("/")
@@ -164,7 +162,7 @@ class QwenToolsClient:
             deduped.append(
                 {
                     "site": str(row.get("site") or self._site_from_url(source_page_url)).strip(),
-                    "profile_url": source_page_url,
+                    "url": source_page_url,
                     "reason": str(row.get("reason") or "source_page").strip(),
                     "confidence": max(0.0, min(1.0, confidence)),
                 }
@@ -177,44 +175,44 @@ class QwenToolsClient:
         output = payload.get("output")
         if not isinstance(output, list):
             return []
-        rows: list[dict[str, Any]] = []
-        for item in output:
-            if not isinstance(item, dict):
+        candidates: list[dict[str, Any]] = []
+        for output_item in output:
+            if not isinstance(output_item, dict):
                 continue
-            if str(item.get("type") or "") != "web_search_image_call":
+            if str(output_item.get("type") or "") != "web_search_image_call":
                 continue
-            raw_output = item.get("output")
-            parsed_output: Any = raw_output
-            if isinstance(raw_output, str):
+            tool_output = output_item.get("output")
+            parsed_output: Any = tool_output
+            if isinstance(tool_output, str):
                 try:
-                    parsed_output = json.loads(raw_output)
+                    parsed_output = json.loads(tool_output)
                 except Exception:
                     continue
-            stack: list[Any] = [parsed_output]
-            while stack:
-                row = stack.pop()
-                if isinstance(row, list):
-                    stack.extend(row)
+            pending_nodes: list[Any] = [parsed_output]
+            while pending_nodes:
+                node = pending_nodes.pop()
+                if isinstance(node, list):
+                    pending_nodes.extend(node)
                     continue
-                if not isinstance(row, dict):
+                if not isinstance(node, dict):
                     continue
-                stack.extend(row.values())
-                image_url = str(row.get("url") or row.get("image_url") or "").strip()
+                pending_nodes.extend(node.values())
+                image_url = str(node.get("url") or node.get("image_url") or "").strip()
                 if not self._is_http_url(image_url):
                     continue
-                source_url = str(row.get("source_url") or row.get("page_url") or "").strip()
-                rows.append(
+                source_url = str(node.get("source_url") or node.get("page_url") or "").strip()
+                candidates.append(
                     {
                         "image_url": image_url,
                         "source_url": source_url,
-                        "title": str(row.get("title") or "").strip(),
-                        "snippet": str(row.get("snippet") or "").strip(),
+                        "title": str(node.get("title") or "").strip(),
+                        "snippet": str(node.get("snippet") or "").strip(),
                         "reason": "web_search_image_tool_call",
                         "source_type": "qwen_web_search_image",
                         "confidence": self._min_confidence,
                     }
                 )
-        return rows
+        return candidates
 
     def _sanitize_image_candidates(self, rows: list[dict[str, Any]], max_count: int) -> list[dict[str, Any]]:
         deduped: list[dict[str, Any]] = []
@@ -244,7 +242,7 @@ class QwenToolsClient:
                 break
         return deduped
 
-    def _post_responses(self, payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def _post_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self._client is None:
             raise RuntimeError("qwen client not initialized")
         if self._min_call_interval_seconds > 0:
@@ -272,7 +270,7 @@ class QwenToolsClient:
             data = response.model_dump(warnings=False)
         else:
             data = {}
-        return data if isinstance(data, dict) else {}, "tool_output_only"
+        return data if isinstance(data, dict) else {}
 
     def _exception_response_text(self, exc: Exception) -> str | None:
         response = getattr(exc, "response", None)
@@ -296,13 +294,13 @@ class QwenToolsClient:
 
     def search_author(self, author: AuthorRecord) -> QwenSearchResult:
         if not self._api_key:
-            return QwenSearchResult([], [], [], failure_reason="qwen_api_key_missing")
+            return QwenSearchResult(source_pages=[], image_candidates=[], filtered_candidates=[], failure_reason="qwen_api_key_missing")
         if not author.orcid:
             return QwenSearchResult(
-                [],
-                [],
-                [],
-                failure_reason="qwen_profile_search_no_orcid",
+                source_pages=[],
+                image_candidates=[],
+                filtered_candidates=[],
+                failure_reason="qwen_web_search_image_no_orcid",
                 abandon_reason_log="orcid missing for web_search_image",
             )
 
@@ -315,29 +313,30 @@ class QwenToolsClient:
         }
         logger.info("qwen_web_search_image_started author_id=%s model=%s", author.author_id, self._model)
         try:
-            data, response_mode = self._post_responses(payload)
+            data = self._post_responses(payload)
         except APIStatusError as exc:
             text = self._exception_response_text(exc)
-            return QwenSearchResult([], [], [], failure_reason="qwen_http_error", raw_content=text, response_text=text)
+            return QwenSearchResult(source_pages=[], image_candidates=[], filtered_candidates=[], failure_reason="qwen_http_error", raw_content=text, response_text=text)
         except APITimeoutError as exc:
             text = str(exc)[:4000]
-            return QwenSearchResult([], [], [], failure_reason="qwen_request_timeout", raw_content=text, response_text=text)
+            return QwenSearchResult(source_pages=[], image_candidates=[], filtered_candidates=[], failure_reason="qwen_request_timeout", raw_content=text, response_text=text)
         except APIConnectionError as exc:
             text = str(exc)[:4000]
-            return QwenSearchResult([], [], [], failure_reason="qwen_request_failed", raw_content=text, response_text=text)
+            return QwenSearchResult(source_pages=[], image_candidates=[], filtered_candidates=[], failure_reason="qwen_request_failed", raw_content=text, response_text=text)
         except Exception as exc:
             text = str(exc)[:4000]
-            return QwenSearchResult([], [], [], failure_reason="qwen_request_failed", raw_content=text, response_text=text)
+            return QwenSearchResult(source_pages=[], image_candidates=[], filtered_candidates=[], failure_reason="qwen_request_failed", raw_content=text, response_text=text)
 
-        response_text = self._extract_response_text(data)
+        # Audit-only text: candidate extraction remains tool-output only.
+        audit_response_text = self._extract_response_text(data)
         usage_total_tokens = self._extract_usage_total_tokens(data)
         rows_from_tool = self._collect_urls_from_tool_calls(data)
         deduped_images = self._sanitize_image_candidates(rows_from_tool, max_count=self._max_candidates)
-        debug_source_pages = self._sanitize_debug_source_pages(
+        source_pages = self._sanitize_debug_source_pages(
             [
                 {
                     "site": self._site_from_url(source_url),
-                    "profile_url": source_url,
+                    "url": source_url,
                     "reason": "web_search_image_source_url",
                     "confidence": self._min_confidence,
                 }
@@ -348,16 +347,15 @@ class QwenToolsClient:
         )
 
         raw_content = json.dumps(data, ensure_ascii=False)[:4000]
-        response_text_short = (response_text or "")[:4000] or None
+        response_text_short = (audit_response_text or "")[:4000] or None
         if not deduped_images:
             return QwenSearchResult(
-                profile_pages=[],
+                source_pages=[],
                 image_candidates=[],
                 filtered_candidates=[],
                 failure_reason="qwen_web_search_image_no_results",
                 raw_content=raw_content,
                 response_text=response_text_short,
-                response_format_mode=response_mode,
                 abandon_reason_log="web_search_image returned no usable image urls",
                 usage_total_tokens=usage_total_tokens,
             )
@@ -368,12 +366,11 @@ class QwenToolsClient:
             len(deduped_images),
         )
         return QwenSearchResult(
-            profile_pages=debug_source_pages,
+            source_pages=source_pages,
             image_candidates=deduped_images,
             filtered_candidates=deduped_images,
             failure_reason=None,
             raw_content=raw_content,
             response_text=response_text_short,
-            response_format_mode=response_mode,
             usage_total_tokens=usage_total_tokens,
         )
