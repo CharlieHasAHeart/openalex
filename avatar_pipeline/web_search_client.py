@@ -7,7 +7,6 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from avatar_pipeline.http import HttpClient
 from avatar_pipeline.models import AuthorRecord
-from avatar_pipeline.profile_image_extractor import ProfileImageExtractor
 from avatar_pipeline.qwen_tools import QwenToolsClient
 
 
@@ -83,9 +82,7 @@ class WebSearchClient:
     ) -> None:
         self._http = http
         self._max_candidates = max(1, max_candidates)
-        self._profile_page_fetch_timeout_seconds = max(3, int(profile_page_fetch_timeout_seconds))
         self._profile_page_max_count = max(1, int(profile_page_max_count))
-        self._profile_image_min_score = float(profile_image_min_score)
         self._image_cache: dict[str, CachedImage] = {}
         self._qwen_tools = QwenToolsClient(
             http=http,
@@ -101,14 +98,10 @@ class WebSearchClient:
             sdk_max_retries=qwen_sdk_max_retries,
             response_path=qwen_response_path,
         )
-        self._profile_extractor = ProfileImageExtractor(
-            profile_image_max_per_page=profile_image_max_per_page,
-            profile_image_min_score=profile_image_min_score,
-        )
-        self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen", "reason_tags": []}
+        self._last_search_diagnostics: dict[str, Any] = {"provider_mode": "qwen_web_search_image", "reason_tags": []}
 
     def provider_mode(self) -> str:
-        return "qwen"
+        return "qwen_web_search_image"
 
     def last_search_diagnostics(self) -> dict[str, Any]:
         return dict(self._last_search_diagnostics)
@@ -143,20 +136,6 @@ class WebSearchClient:
             if len(cleaned) >= self._profile_page_max_count:
                 break
         return cleaned
-
-    def _fetch_profile_page_html(self, profile_url: str) -> str | None:
-        try:
-            resp = self._http.request("GET", profile_url, timeout=self._profile_page_fetch_timeout_seconds, stream=False)
-        except Exception:
-            return None
-        content_type = (resp.headers.get("Content-Type") or "").lower()
-        if "text/html" not in content_type and "application/xhtml+xml" not in content_type and content_type:
-            return None
-        try:
-            resp.encoding = resp.encoding or resp.apparent_encoding or "utf-8"
-        except Exception:
-            pass
-        return resp.text[:400_000]
 
     def _dedupe_image_candidates(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         best_by_url: dict[str, dict[str, Any]] = {}
@@ -224,7 +203,7 @@ class WebSearchClient:
             failure_reason = result.failure_reason
             reason_tags = [failure_reason] if failure_reason else []
             self._last_search_diagnostics = {
-                "provider_mode": "qwen",
+                "provider_mode": "qwen_web_search_image",
                 "reason_tags": reason_tags,
                 "profile_pages_count": len(cleaned_profile_pages),
                 "image_candidates_count": len(deduped_candidates),
@@ -248,7 +227,7 @@ class WebSearchClient:
             failure_reason = result.failure_reason or "qwen_web_search_image_no_candidates"
             reason_tags = [failure_reason]
             self._last_search_diagnostics = {
-                "provider_mode": "qwen",
+                "provider_mode": "qwen_web_search_image",
                 "reason_tags": reason_tags,
                 "profile_pages_count": len(cleaned_profile_pages),
                 "image_candidates_count": len(deduped_candidates),
@@ -270,7 +249,7 @@ class WebSearchClient:
         failure_reason = None
         reason_tags = [failure_reason] if failure_reason else []
         self._last_search_diagnostics = {
-            "provider_mode": "qwen",
+            "provider_mode": "qwen_web_search_image",
             "reason_tags": reason_tags,
             "profile_pages_count": len(cleaned_profile_pages),
             "image_candidates_count": len(deduped_candidates),
